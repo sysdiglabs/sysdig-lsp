@@ -1,24 +1,48 @@
-use sysdig_lsp::LSP;
-use tower_lsp::lsp_types::InitializeParams;
-use tower_lsp::LanguageServer;
+use std::collections::HashMap;
+use std::io;
+use std::path::Path;
 
-pub struct Client<'a> {
-    lsp: &'a LSP,
+use sysdig_lsp::{Filesystem, LSP};
+use tower_lsp::lsp_types::{InitializeParams, InitializeResult, InitializedParams};
+use tower_lsp::LanguageServer;
+use tower_lsp::LspService;
+
+pub struct Client {
+    service: LspService<LSP<FakeFilesystem>>,
 }
 
-impl Client<'_> {
-    pub async fn can_connect_to_lsp(&self) -> bool {
-        self.lsp
-            .initialize(InitializeParams::default())
-            .await
-            .is_ok()
+#[derive(Default)]
+struct FakeFilesystem {
+    files: HashMap<String, String>,
+}
+
+#[async_trait::async_trait]
+impl Filesystem for FakeFilesystem {
+    async fn read_file<A: AsRef<Path> + Send>(&self, path: A) -> io::Result<String> {
+        self.files
+            .get(&path.as_ref().to_string_lossy().into_owned())
+            .cloned()
+            .ok_or(io::Error::new(io::ErrorKind::NotFound, "not found"))
     }
 }
 
-pub fn new_lsp() -> LSP {
-    LSP::default()
+impl Client {
+    pub async fn initialize_lsp(&mut self) -> InitializeResult {
+        let lsp = self.service.inner();
+
+        let result = lsp
+            .initialize(InitializeParams::default())
+            .await
+            .expect("initialize failed");
+
+        lsp.initialized(InitializedParams {}).await;
+
+        result
+    }
 }
 
-pub fn new_client(lsp: &LSP) -> Client {
-    Client { lsp }
+pub fn new_lsp_client() -> Client {
+    let (service, _) = LspService::new(|client| LSP::new(client, FakeFilesystem::default()));
+
+    return Client { service };
 }

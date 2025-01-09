@@ -42,6 +42,7 @@
                 rust-analyzer # rust lsp
                 lldb # rust debugger
                 pre-commit
+                sysdig-lsp
               ];
 
               shellHook = ''

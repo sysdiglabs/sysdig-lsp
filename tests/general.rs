@@ -1,9 +1,10 @@
 mod setup;
 
 #[tokio::test]
-async fn when_the_lsp_is_loaded_it_listens_on_a_port() {
-    let lsp = setup::new_lsp();
-    let client = setup::new_client(&lsp);
+async fn when_the_lsp_is_loaded_initializes_correctly() {
+    let mut client = setup::new_lsp_client();
 
-    assert!(client.can_connect_to_lsp().await);
+    let response = client.initialize_lsp().await;
+
+    assert!(response.capabilities.code_action_provider.is_some());
 }
