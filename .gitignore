@@ -1,0 +1,8 @@
+.direnv/
+result
+.secrets
+
+
+# Added by cargo
+
+/target

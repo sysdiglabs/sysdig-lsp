@@ -1,0 +1,57 @@
+{
+  inputs = {
+    nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
+    flake-utils.url = "github:numtide/flake-utils";
+  };
+  outputs =
+    {
+      self,
+      nixpkgs,
+      flake-utils,
+    }:
+    let
+      overlays.default = final: prev: {
+        sysdig-lsp = prev.callPackage ./package.nix { };
+      };
+      flake = flake-utils.lib.eachDefaultSystem (
+        system:
+        let
+          pkgs = import nixpkgs {
+            inherit system;
+            config.allowUnfree = true;
+            overlays = [ self.overlays.default ];
+          };
+        in
+        {
+          packages = with pkgs; {
+            inherit sysdig-lsp;
+            default = sysdig-lsp;
+          };
+
+          devShells.default =
+            with pkgs;
+            mkShell {
+              packages = [
+                cargo
+                rustc
+                rustfmt
+                cargo-audit
+                cargo-watch
+                clippy
+                just
+                rust-analyzer # rust lsp
+                lldb # rust debugger
+                pre-commit
+              ];
+
+              shellHook = ''
+                pre-commit install
+              '';
+            };
+
+          formatter = pkgs.nixfmt-rfc-style;
+        }
+      );
+    in
+    flake // { inherit overlays; };
+}

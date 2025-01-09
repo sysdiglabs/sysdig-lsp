@@ -1,0 +1,9 @@
+[package]
+name = "sysdig-lsp"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+async-trait = "0.1.85"
+tokio = { version = "1.43.0", features = ["full"] }
+tower-lsp = "0.20.0"
