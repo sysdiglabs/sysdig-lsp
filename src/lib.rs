@@ -12,13 +12,34 @@ use tower_lsp::lsp_types::{
 };
 use tower_lsp::Client;
 
-pub struct LSP {
-    client: Client,
+#[async_trait::async_trait]
+pub trait LSPClient {
+    async fn log_message(&self, message_type: MessageType, message: &str);
+    async fn publish_diagnostics(&self, url: Url, diagnostics: Vec<Diagnostic>, other: Option<i32>);
+}
+
+#[async_trait::async_trait]
+impl LSPClient for Client {
+    async fn log_message(&self, message_type: MessageType, message: &str) {
+        Client::log_message(self, message_type, message).await
+    }
+    async fn publish_diagnostics(
+        &self,
+        url: Url,
+        diagnostics: Vec<Diagnostic>,
+        other: Option<i32>,
+    ) {
+        Client::publish_diagnostics(self, url, diagnostics, other).await
+    }
+}
+
+pub struct LSP<C> {
+    client: C,
     documents: Arc<RwLock<HashMap<String, String>>>,
 }
 
-impl LSP {
-    pub fn new(client: Client) -> LSP {
+impl<C> LSP<C> {
+    pub fn new(client: C) -> LSP<C> {
         LSP {
             client,
             documents: Default::default(),
@@ -27,7 +48,11 @@ impl LSP {
 }
 
 #[async_trait::async_trait]
-impl tower_lsp::LanguageServer for LSP {
+impl<C> tower_lsp::LanguageServer for LSP<C>
+where
+    C: Send + Sync + 'static,
+    C: LSPClient,
+{
     async fn initialize(&self, _: InitializeParams) -> Result<InitializeResult> {
         Ok(InitializeResult {
             capabilities: ServerCapabilities {
@@ -110,7 +135,7 @@ impl tower_lsp::LanguageServer for LSP {
     }
 }
 
-impl LSP {
+impl<C> LSP<C> {
     async fn update_document_text<'a, 'b>(
         &self,
         document: impl Into<Cow<'a, str>>,
@@ -129,7 +154,12 @@ impl LSP {
             .get(document.as_ref())
             .map(String::to_owned)
     }
+}
 
+impl<C> LSP<C>
+where
+    C: LSPClient,
+{
     async fn check_for_errors(&self, uri: &Url, content: &str) {
         let mut diagnostics = Vec::new();
 
