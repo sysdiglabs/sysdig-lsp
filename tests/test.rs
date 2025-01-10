@@ -8,14 +8,20 @@ use tower_lsp::lsp_types::{
 };
 use tower_lsp::LanguageServer;
 
-pub struct Client {
-    server: LSP<InnerClient>,
-    inner_client: InnerClient,
+pub struct TestClient {
+    server: LSP<TestClientRecordings>,
+    recordings: TestClientRecordings,
 }
 
-impl Client {
-    pub fn inner_client(&self) -> &InnerClient {
-        &self.inner_client
+impl TestClient {
+    pub fn new() -> TestClient {
+        let recordings = TestClientRecordings::default();
+        let server = LSP::new(recordings.clone());
+        TestClient { server, recordings }
+    }
+
+    pub fn recordings(&self) -> &TestClientRecordings {
+        &self.recordings
     }
 
     pub async fn initialize_lsp(&mut self) -> InitializeResult {
@@ -45,13 +51,13 @@ impl Client {
 }
 
 #[derive(Default, Clone)]
-pub struct InnerClient {
+pub struct TestClientRecordings {
     logged_messages: Arc<Mutex<Vec<(MessageType, String)>>>,
     diagnostics: Arc<Mutex<Vec<Diagnostic>>>,
 }
 
 #[async_trait::async_trait]
-impl LSPClient for InnerClient {
+impl LSPClient for TestClientRecordings {
     async fn log_message(&self, message_type: MessageType, message: &str) {
         self.logged_messages
             .lock()
@@ -69,23 +75,11 @@ impl LSPClient for InnerClient {
     }
 }
 
-impl InnerClient {
+impl TestClientRecordings {
     pub async fn received_diagnostics(&self) -> Vec<Diagnostic> {
         self.diagnostics.lock().await.clone()
     }
     pub async fn received_log_messages(&self) -> Vec<(MessageType, String)> {
         self.logged_messages.lock().await.clone()
     }
-}
-
-pub fn new_lsp_client() -> Client {
-    let inner_client = InnerClient::default();
-    let server = LSP::new(inner_client.clone());
-
-    let client = Client {
-        server,
-        inner_client,
-    };
-
-    client
 }

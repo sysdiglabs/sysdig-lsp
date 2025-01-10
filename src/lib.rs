@@ -1,3 +1,7 @@
+mod lsp_client;
+
+pub use lsp_client::LSPClient;
+
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -10,28 +14,6 @@ use tower_lsp::lsp_types::{
     InitializedParams, MessageType, Position, Range, ServerCapabilities,
     TextDocumentSyncCapability, TextDocumentSyncKind, TextEdit, Url, WorkspaceEdit,
 };
-use tower_lsp::Client;
-
-#[async_trait::async_trait]
-pub trait LSPClient {
-    async fn log_message(&self, message_type: MessageType, message: &str);
-    async fn publish_diagnostics(&self, url: Url, diagnostics: Vec<Diagnostic>, other: Option<i32>);
-}
-
-#[async_trait::async_trait]
-impl LSPClient for Client {
-    async fn log_message(&self, message_type: MessageType, message: &str) {
-        Client::log_message(self, message_type, message).await
-    }
-    async fn publish_diagnostics(
-        &self,
-        url: Url,
-        diagnostics: Vec<Diagnostic>,
-        other: Option<i32>,
-    ) {
-        Client::publish_diagnostics(self, url, diagnostics, other).await
-    }
-}
 
 pub struct LSP<C> {
     client: C,
