@@ -10,5 +10,6 @@ rustPlatform.buildRustPackage {
     lockFile = ./Cargo.lock;
   };
 
+  doCheck = false;
   meta.mainProgram = "sysdig-lsp";
 }

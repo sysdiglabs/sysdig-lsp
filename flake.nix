@@ -42,12 +42,14 @@
                 rust-analyzer # rust lsp
                 lldb # rust debugger
                 pre-commit
-                sysdig-lsp
+                sysdig-cli-scanner
               ];
 
               shellHook = ''
                 pre-commit install
+                export PATH="$PWD/target/debug:$PWD/target/release:$PATH"
               '';
+
             };
 
           formatter = pkgs.nixfmt-rfc-style;

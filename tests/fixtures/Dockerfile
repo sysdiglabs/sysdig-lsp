@@ -1,3 +1,3 @@
-FROM ubuntu
+FROM alpine as builder
 
-RUN apk add nginx
+run apk add nginx
