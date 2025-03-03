@@ -37,6 +37,7 @@
                 rustfmt
                 cargo-audit
                 cargo-watch
+                cargo-nextest
                 clippy
                 just
                 rust-analyzer # rust lsp
