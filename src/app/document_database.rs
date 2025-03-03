@@ -35,6 +35,14 @@ impl DocumentDatabase {
             .and_modify(|d| d.diagnostics.extend_from_slice(diagnostics));
     }
 
+    pub async fn remove_diagnostics(&self, uri: impl Into<String>) {
+        self.documents
+            .write()
+            .await
+            .entry(uri.into())
+            .and_modify(|d| d.diagnostics.clear());
+    }
+
     pub async fn all_diagnostics(&self) -> impl Iterator<Item = (String, Vec<Diagnostic>)> {
         let hash_map = self.documents.read().await.clone();
         hash_map

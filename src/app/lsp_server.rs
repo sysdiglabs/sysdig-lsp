@@ -70,7 +70,7 @@ where
             let uri = params.text_document.uri.as_str();
             self.documents.remove_document(uri).await;
             self.update_document_text(uri, &change.text).await;
-            let _ = self.publish_diagnostics().await;
+            let _ = self.publish_all_diagnostics().await;
         }
     }
 
@@ -78,10 +78,13 @@ where
         let content = self
             .get_document_text(&params.text_document.uri)
             .await
-            .ok_or(lsp_internal_error(format!(
-                "unable to extract document content for document: {}",
-                &params.text_document.uri
-            )))?;
+            .ok_or(lsp_error(
+                ErrorCode::InternalError,
+                format!(
+                    "unable to extract document content for document: {}",
+                    &params.text_document.uri
+                ),
+            ))?;
 
         if let Some(line) = content.lines().nth(params.range.start.line as usize) {
             if line.starts_with("FROM ") {
@@ -106,11 +109,14 @@ where
         match command {
             COMMAND_EXECUTE_SCAN => {
                 if params.arguments.len() < 2 {
-                    return Err(lsp_internal_error(format!(
+                    return Err(lsp_error(
+                        ErrorCode::InternalError,
+                        format!(
                         "error executing command '{}', invalid number of arguments: {}, expected 2",
                         command,
                         params.arguments.len()
-                    )));
+                    ),
+                    ));
                 }
 
                 let uri = params
@@ -166,14 +172,14 @@ impl<C> LSPServer<C>
 where
     C: LSPClient,
 {
-    async fn publish_diagnostics(&self) -> Result<()> {
+    async fn publish_all_diagnostics(&self) -> Result<()> {
         let all_diagnostics = self.documents.all_diagnostics().await;
         for (uri, diagnostics) in all_diagnostics {
             let url = Url::parse(&uri).map_err(|_| {
-                lsp_internal_error(format!(
-                    "unable to parse uri ({}) when publishing diagnostics",
-                    &uri
-                ))
+                lsp_error(
+                    ErrorCode::InternalError,
+                    format!("unable to parse uri ({}) when publishing diagnostics", &uri),
+                )
             })?;
             self.client
                 .publish_diagnostics(url, diagnostics, None)
@@ -183,11 +189,16 @@ where
     }
 
     async fn scan_image_from_file(&self, uri: &str, line: u32) -> Result<()> {
-        let document = self
-            .documents
-            .read_document(uri)
-            .await
-            .ok_or(lsp_internal_error("unable to obtain document to scan"))?;
+        let document = self.documents.read_document(uri).await.ok_or(lsp_error(
+            ErrorCode::InternalError,
+            "unable to obtain document to scan",
+        ))?;
+
+        let image_for_selected_line =
+            self.image_from_line(line, &document.text).ok_or(lsp_error(
+                ErrorCode::ParseError,
+                format!("unable to retrieve image for the selected line: {}", line),
+            ))?;
 
         let diagnostic = Diagnostic {
             range: Range {
@@ -195,12 +206,13 @@ where
                 end: Position::new(line, u32::MAX),
             },
             severity: Some(DiagnosticSeverity::WARNING),
-            message: format!("Vulnerabilities for {}: 1 Critical, 2 High, 6 Medium, 10 Low, 50 Negligible. At least, lol", self.image_from_line(line, &document.text).unwrap()),
+            message: format!("Vulnerabilities for {}: 1 Critical, 2 High, 6 Medium, 10 Low, 50 Negligible. At least, lol", image_for_selected_line),
             ..Default::default()
         };
 
+        self.documents.remove_diagnostics(uri).await;
         self.documents.add_diagnostics(uri, &[diagnostic]).await;
-        self.publish_diagnostics().await
+        self.publish_all_diagnostics().await
     }
 
     fn image_from_line<'a>(&self, line: u32, contents: &'a str) -> Option<&'a str> {
@@ -215,9 +227,9 @@ where
     }
 }
 
-fn lsp_internal_error(message: impl Into<Cow<'static, str>>) -> Error {
+fn lsp_error(code: ErrorCode, message: impl Into<Cow<'static, str>>) -> Error {
     Error {
-        code: ErrorCode::InternalError,
+        code,
         message: message.into(),
         data: None,
     }
