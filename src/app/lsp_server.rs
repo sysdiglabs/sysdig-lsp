@@ -12,19 +12,23 @@ use tower_lsp::LanguageServer;
 
 use super::commands::CommandExecutor;
 use super::queries::QueryExecutor;
-use super::{InMemoryDocumentDatabase, LSPClient};
+use super::{ImageScanner, InMemoryDocumentDatabase, LSPClient};
 
-pub struct LSPServer<Client> {
-    command_executor: CommandExecutor<Client>,
+pub struct LSPServer<Client, S> {
+    command_executor: CommandExecutor<Client, S>,
     query_executor: QueryExecutor,
 }
 
-impl<C> LSPServer<C> {
-    pub fn new(client: C) -> LSPServer<C> {
+impl<C, S> LSPServer<C, S> {
+    pub fn new(client: C, image_scanner: S) -> LSPServer<C, S> {
         let document_database = InMemoryDocumentDatabase::default();
 
         LSPServer {
-            command_executor: CommandExecutor::new(client, document_database.clone()),
+            command_executor: CommandExecutor::new(
+                client,
+                image_scanner,
+                document_database.clone(),
+            ),
             query_executor: QueryExecutor::new(document_database.clone()),
         }
     }
@@ -54,10 +58,10 @@ impl TryFrom<&str> for SupportedCommands {
 }
 
 #[async_trait::async_trait]
-impl<C> LanguageServer for LSPServer<C>
+impl<C, S> LanguageServer for LSPServer<C, S>
 where
-    C: Send + Sync + 'static,
-    C: LSPClient,
+    C: LSPClient + Send + Sync + 'static,
+    S: ImageScanner + Send + Sync + 'static,
 {
     async fn initialize(&self, _: InitializeParams) -> Result<InitializeResult> {
         Ok(InitializeResult {
@@ -175,8 +179,6 @@ where
         Ok(())
     }
 }
-
-impl<C> LSPServer<C> where C: LSPClient {}
 
 fn lsp_error(code: ErrorCode, message: impl Into<Cow<'static, str>>) -> Error {
     Error {

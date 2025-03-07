@@ -3,17 +3,19 @@ use tower_lsp::{
     lsp_types::{Diagnostic, DiagnosticSeverity, MessageType, Position, Range},
 };
 
-use super::{InMemoryDocumentDatabase, LSPClient};
+use super::{ImageScanner, InMemoryDocumentDatabase, LSPClient};
 
-pub struct CommandExecutor<C> {
+pub struct CommandExecutor<C, S> {
     client: C,
+    image_scanner: S,
     document_database: InMemoryDocumentDatabase,
 }
 
-impl<C> CommandExecutor<C> {
-    pub fn new(client: C, document_database: InMemoryDocumentDatabase) -> Self {
+impl<C, S> CommandExecutor<C, S> {
+    pub fn new(client: C, image_scanner: S, document_database: InMemoryDocumentDatabase) -> Self {
         Self {
             client,
+            image_scanner,
             document_database,
         }
     }
@@ -30,7 +32,7 @@ impl<C> CommandExecutor<C> {
     }
 }
 
-impl<C> CommandExecutor<C>
+impl<C, S> CommandExecutor<C, S>
 where
     C: LSPClient,
 {
@@ -44,6 +46,22 @@ where
         self.client.log_message(message_type, message).await;
     }
 
+    async fn publish_all_diagnostics(&self) -> Result<()> {
+        let all_diagnostics = self.document_database.all_diagnostics().await;
+        for (url, diagnostics) in all_diagnostics {
+            self.client
+                .publish_diagnostics(&url, diagnostics, None)
+                .await;
+        }
+        Ok(())
+    }
+}
+
+impl<C, S> CommandExecutor<C, S>
+where
+    C: LSPClient,
+    S: ImageScanner,
+{
     pub async fn scan_image_from_file(&self, uri: &str, line: u32) -> Result<()> {
         let document_text = self
             .document_database
@@ -64,14 +82,46 @@ where
                     data: None,
                 })?;
 
-        let diagnostic = Diagnostic {
-            range: Range {
-                start: Position::new(line, 0),
-                end: Position::new(line, u32::MAX),
-            },
-            severity: Some(DiagnosticSeverity::WARNING),
-            message: format!("Vulnerabilities for {}: 1 Critical, 2 High, 6 Medium, 10 Low, 50 Negligible. At least, lol", image_for_selected_line),
-            ..Default::default()
+        let scan_result = self
+            .image_scanner
+            .scan_image(image_for_selected_line)
+            .await
+            .map_err(|e| Error {
+                code: ErrorCode::InternalError,
+                message: e.to_string().into(),
+                data: None,
+            })?;
+
+        let diagnostic = {
+            let mut diagnostic = Diagnostic {
+                range: Range {
+                    start: Position::new(line, 0),
+                    end: Position::new(line, u32::MAX),
+                },
+                severity: Some(DiagnosticSeverity::HINT),
+                message: "No vulnerabilities found.".to_owned(),
+                ..Default::default()
+            };
+
+            if scan_result.has_vulnerabilities() {
+                let v = &scan_result.vulnerabilities;
+                diagnostic.message = format!("Vulnerabilities found for {}: {} Critical, {} High, {} Medium, {} Low, {} Negligible",
+                    image_for_selected_line,
+                    v.critical,
+                    v.high,
+                    v.medium,
+                    v.low,
+                    v.negligible
+                );
+
+                diagnostic.severity = Some(if scan_result.is_compliant {
+                    DiagnosticSeverity::WARNING
+                } else {
+                    DiagnosticSeverity::ERROR
+                });
+            }
+
+            diagnostic
         };
 
         self.document_database.remove_diagnostics(uri).await;
@@ -79,15 +129,5 @@ where
             .append_document_diagnostics(uri, &[diagnostic])
             .await;
         self.publish_all_diagnostics().await
-    }
-
-    async fn publish_all_diagnostics(&self) -> Result<()> {
-        let all_diagnostics = self.document_database.all_diagnostics().await;
-        for (url, diagnostics) in all_diagnostics {
-            self.client
-                .publish_diagnostics(&url, diagnostics, None)
-                .await;
-        }
-        Ok(())
     }
 }

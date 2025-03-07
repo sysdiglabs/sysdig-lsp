@@ -1,5 +1,8 @@
 use serde_json::json;
-use tower_lsp::lsp_types::{CodeActionOrCommand, Command, MessageType};
+use sysdig_lsp::app::{ImageScanResult, Vulnerabilities};
+use tower_lsp::lsp_types::{
+    CodeActionOrCommand, Command, Diagnostic, DiagnosticSeverity, MessageType, Position, Range,
+};
 
 mod test;
 
@@ -42,6 +45,19 @@ async fn when_the_client_asks_for_the_existing_code_actions_it_receives_the_avai
 #[tokio::test]
 async fn when_the_client_executes_the_scan_image_code_action_it_receives_the_vulnerabilities() {
     let mut client = test::TestClient::new_initialized().await;
+    client
+        .image_scanner()
+        .set_scan_result_to_return(ImageScanResult {
+            vulnerabilities: Vulnerabilities {
+                critical: 1,
+                high: 2,
+                medium: 6,
+                low: 10,
+                negligible: 50,
+            },
+            is_compliant: false,
+        })
+        .await;
 
     client
         .open_file_with_contents("Dockerfile", "FROM alpine")
@@ -60,13 +76,29 @@ async fn when_the_client_executes_the_scan_image_code_action_it_receives_the_vul
         .await
         .unwrap();
     assert_eq!(received_diagnostics.len(), 1);
-    assert_eq!(received_diagnostics.iter().filter(|x| x.message == "Vulnerabilities for alpine: 1 Critical, 2 High, 6 Medium, 10 Low, 50 Negligible. At least, lol").count(), 1)
+    assert_eq!(
+        received_diagnostics.first().unwrap(),
+        &Diagnostic { range: Range { start: Position { line: 0, character: 0 }, end: Position { line: 0, character: 4294967295 } }, severity: Some(DiagnosticSeverity::ERROR), message: "Vulnerabilities found for alpine: 1 Critical, 2 High, 6 Medium, 10 Low, 50 Negligible".to_owned(), ..Default::default() }
+    );
 }
 
 #[tokio::test]
 async fn when_the_client_executes_the_scan_image_multiple_times_it_receives_the_vulnerabilities_only_once(
 ) {
     let mut client = test::TestClient::new_initialized().await;
+    client
+        .image_scanner()
+        .set_scan_result_to_return(ImageScanResult {
+            vulnerabilities: Vulnerabilities {
+                critical: 1,
+                high: 2,
+                medium: 6,
+                low: 10,
+                negligible: 50,
+            },
+            is_compliant: false,
+        })
+        .await;
 
     client
         .open_file_with_contents("Dockerfile", "FROM alpine")
@@ -91,5 +123,8 @@ async fn when_the_client_executes_the_scan_image_multiple_times_it_receives_the_
         .await
         .unwrap();
     assert_eq!(received_diagnostics.len(), 1);
-    assert_eq!(received_diagnostics.iter().filter(|x| x.message == "Vulnerabilities for alpine: 1 Critical, 2 High, 6 Medium, 10 Low, 50 Negligible. At least, lol").count(), 1)
+    assert_eq!(
+        received_diagnostics.first().unwrap(),
+        &Diagnostic { range: Range { start: Position { line: 0, character: 0 }, end: Position { line: 0, character: 4294967295 } }, severity: Some(DiagnosticSeverity::ERROR), message: "Vulnerabilities found for alpine: 1 Critical, 2 High, 6 Medium, 10 Low, 50 Negligible".to_owned(), ..Default::default() }
+    );
 }

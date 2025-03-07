@@ -1,8 +1,9 @@
+use core::panic;
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::sync::Arc;
 
-use sysdig_lsp::app::{LSPClient, LSPServer};
+use sysdig_lsp::app::{ImageScanError, ImageScanResult, ImageScanner, LSPClient, LSPServer};
 use tokio::sync::Mutex;
 use tower_lsp::lsp_types::{
     CodeActionOrCommand, CodeActionParams, Diagnostic, DidOpenTextDocumentParams,
@@ -12,15 +13,21 @@ use tower_lsp::lsp_types::{
 use tower_lsp::LanguageServer;
 
 pub struct TestClient {
-    server: LSPServer<TestClientRecorder>,
+    server: LSPServer<TestClientRecorder, TestImageScanner>,
     recorder: TestClientRecorder,
+    image_scanner: TestImageScanner,
 }
 
 impl TestClient {
     pub fn new() -> TestClient {
         let recorder = TestClientRecorder::default();
-        let server = LSPServer::new(recorder.clone());
-        TestClient { server, recorder }
+        let image_scanner = TestImageScanner::default();
+        let server = LSPServer::new(recorder.clone(), image_scanner.clone());
+        TestClient {
+            server,
+            recorder,
+            image_scanner,
+        }
     }
 
     pub async fn new_initialized() -> TestClient {
@@ -31,6 +38,10 @@ impl TestClient {
 
     pub fn recorder(&self) -> &TestClientRecorder {
         &self.recorder
+    }
+
+    pub fn image_scanner(&self) -> &TestImageScanner {
+        &self.image_scanner
     }
 
     pub async fn initialize_lsp(&mut self) -> InitializeResult {
@@ -149,5 +160,33 @@ impl TestClientRecorder {
     }
     pub async fn received_log_messages(&self) -> Vec<(MessageType, String)> {
         self.logged_messages.lock().await.clone()
+    }
+}
+
+#[derive(Default, Clone)]
+pub struct TestImageScanner {
+    image_scanned: Arc<Mutex<String>>,
+    scan_result_to_return: Arc<Mutex<Option<ImageScanResult>>>,
+}
+
+#[async_trait::async_trait]
+impl ImageScanner for TestImageScanner {
+    async fn scan_image(&self, image_pull_string: &str) -> Result<ImageScanResult, ImageScanError> {
+        *self.image_scanned.lock().await = image_pull_string.to_string();
+
+        if let Some(scan_result) = self.scan_result_to_return.lock().await.as_ref() {
+            return Ok(scan_result.clone());
+        }
+
+        panic!("scan result to return has not been defined")
+    }
+}
+
+impl TestImageScanner {
+    pub async fn set_scan_result_to_return(&self, scan_result_to_return: ImageScanResult) {
+        self.scan_result_to_return
+            .lock()
+            .await
+            .replace(scan_result_to_return);
     }
 }

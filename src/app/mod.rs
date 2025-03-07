@@ -8,4 +8,4 @@ mod scanner;
 pub use document_database::*;
 pub use lsp_client::LSPClient;
 pub use lsp_server::LSPServer;
-pub use scanner::{ImageScanError, ImageScanResult, ImageScanner};
+pub use scanner::{ImageScanError, ImageScanResult, ImageScanner, Vulnerabilities};
