@@ -1,4 +1,4 @@
-use sysdig_lsp::LSPServer;
+use sysdig_lsp::app::LSPServer;
 use tower_lsp::{LspService, Server};
 
 #[tokio::main]

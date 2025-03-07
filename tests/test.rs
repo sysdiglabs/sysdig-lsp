@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::fmt::Display;
 use std::sync::Arc;
 
-use sysdig_lsp::{LSPClient, LSPServer};
+use sysdig_lsp::app::{LSPClient, LSPServer};
 use tokio::sync::Mutex;
 use tower_lsp::lsp_types::{
     CodeActionOrCommand, CodeActionParams, Diagnostic, DidOpenTextDocumentParams,
@@ -114,7 +114,7 @@ impl Default for TestClient {
 #[derive(Default, Clone)]
 pub struct TestClientRecorder {
     logged_messages: Arc<Mutex<Vec<(MessageType, String)>>>,
-    diagnostics_for_files: Arc<Mutex<HashMap<String, Vec<Diagnostic>>>>,
+    diagnostics_for_each_file: Arc<Mutex<HashMap<String, Vec<Diagnostic>>>>,
 }
 
 #[async_trait::async_trait]
@@ -128,11 +128,11 @@ impl LSPClient for TestClientRecorder {
 
     async fn publish_diagnostics(
         &self,
-        url: Url,
+        url: &str,
         diagnostics: Vec<Diagnostic>,
         _other: Option<i32>,
     ) {
-        self.diagnostics_for_files
+        self.diagnostics_for_each_file
             .lock()
             .await
             .insert(url.to_string(), diagnostics);
@@ -141,7 +141,7 @@ impl LSPClient for TestClientRecorder {
 
 impl TestClientRecorder {
     pub async fn diagnostics_displayed_for_file(&self, filename: &str) -> Option<Vec<Diagnostic>> {
-        self.diagnostics_for_files
+        self.diagnostics_for_each_file
             .lock()
             .await
             .get(filename)

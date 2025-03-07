@@ -1,38 +1,60 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 
 use tokio::sync::RwLock;
 use tower_lsp::lsp_types::Diagnostic;
 
-#[derive(Default, Debug)]
-pub struct DocumentDatabase {
-    documents: RwLock<HashMap<String, Document>>,
+#[derive(Default, Debug, Clone)]
+pub struct InMemoryDocumentDatabase {
+    documents: Arc<RwLock<HashMap<String, Document>>>,
 }
 
 #[derive(Default, Debug, Clone)]
-pub struct Document {
+struct Document {
     pub text: String,
     pub diagnostics: Vec<Diagnostic>,
 }
 
-impl DocumentDatabase {
-    pub async fn add_document(&self, uri: impl Into<String>, document: Document) {
-        self.documents.write().await.insert(uri.into(), document);
+impl InMemoryDocumentDatabase {
+    pub async fn write_document_text(&self, uri: impl Into<String>, text: impl Into<String>) {
+        let text = text.into();
+
+        self.documents
+            .write()
+            .await
+            .entry(uri.into())
+            .and_modify(|e| e.text = text.clone())
+            .or_insert_with(|| Document {
+                text,
+                ..Default::default()
+            });
     }
 
-    pub async fn read_document(&self, uri: &str) -> Option<Document> {
+    async fn read_document(&self, uri: &str) -> Option<Document> {
         self.documents.read().await.get(uri).cloned()
+    }
+
+    pub async fn read_document_text(&self, uri: &str) -> Option<String> {
+        self.read_document(uri).await.map(|e| e.text)
     }
 
     pub async fn remove_document(&self, uri: &str) {
         self.documents.write().await.remove(uri);
     }
 
-    pub async fn add_diagnostics(&self, uri: impl Into<String>, diagnostics: &[Diagnostic]) {
+    pub async fn append_document_diagnostics(
+        &self,
+        uri: impl Into<String>,
+        diagnostics: &[Diagnostic],
+    ) {
         self.documents
             .write()
             .await
             .entry(uri.into())
-            .and_modify(|d| d.diagnostics.extend_from_slice(diagnostics));
+            .and_modify(|d| d.diagnostics.extend_from_slice(diagnostics))
+            .or_insert_with(|| Document {
+                diagnostics: diagnostics.to_vec(),
+                ..Default::default()
+            });
     }
 
     pub async fn remove_diagnostics(&self, uri: impl Into<String>) {
@@ -75,29 +97,31 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_add_and_read_document() {
-        let db = DocumentDatabase::default();
-        let doc = Document {
-            text: "let x = 42;".to_string(),
-            diagnostics: vec![create_diagnostic((0, 4), (0, 5), "Unused variable")],
-        };
+    async fn test_add_text_if_not_exists() {
+        let db = InMemoryDocumentDatabase::default();
 
-        db.add_document("file://test.rs", doc.clone()).await;
-        let retrieved_doc = db.read_document("file://test.rs").await;
+        db.write_document_text("file://main.rs", "contents").await;
 
-        assert!(retrieved_doc.is_some());
-        assert_eq!(retrieved_doc.unwrap().text, "let x = 42;");
+        let document = db.read_document("file://main.rs").await.unwrap();
+        assert_eq!(document.text, "contents");
+    }
+
+    #[tokio::test]
+    async fn test_add_text_and_update_if_exists() {
+        let db = InMemoryDocumentDatabase::default();
+
+        db.write_document_text("file://main.rs", "contents").await;
+        db.write_document_text("file://main.rs", "updated").await;
+
+        let document = db.read_document("file://main.rs").await.unwrap();
+        assert_eq!(document.text, "updated");
     }
 
     #[tokio::test]
     async fn test_remove_document() {
-        let db = DocumentDatabase::default();
-        let doc = Document {
-            text: "fn main() {}".to_string(),
-            diagnostics: vec![],
-        };
+        let db = InMemoryDocumentDatabase::default();
 
-        db.add_document("file://main.rs", doc).await;
+        db.write_document_text("file://main.rs", "contents").await;
         assert!(db.read_document("file://main.rs").await.is_some());
 
         db.remove_document("file://main.rs").await;
@@ -106,19 +130,14 @@ mod tests {
 
     #[tokio::test]
     async fn test_add_diagnostics() {
-        let db = DocumentDatabase::default();
-        let doc = Document {
-            text: "fn test() {}".to_string(),
-            diagnostics: vec![],
-        };
-
+        let db = InMemoryDocumentDatabase::default();
         let diagnostics = vec![
             create_diagnostic((0, 3), (0, 7), "Function name is too generic"),
             create_diagnostic((0, 0), (0, 2), "Missing doc comment"),
         ];
 
-        db.add_document("file://test.rs", doc).await;
-        db.add_diagnostics("file://test.rs", &diagnostics).await;
+        db.append_document_diagnostics("file://test.rs", &diagnostics)
+            .await;
 
         let retrieved_doc = db.read_document("file://test.rs").await.unwrap();
         assert_eq!(retrieved_doc.diagnostics.len(), diagnostics.len());
@@ -130,26 +149,20 @@ mod tests {
 
     #[tokio::test]
     async fn test_all_diagnostics() {
-        let db = DocumentDatabase::default();
+        let db = InMemoryDocumentDatabase::default();
 
-        db.add_document(
+        db.append_document_diagnostics(
             "file://mod1.rs",
-            Document {
-                text: "module 1".to_string(),
-                diagnostics: vec![create_diagnostic((0, 0), (0, 6), "Incorrect module name")],
-            },
+            &vec![create_diagnostic((0, 0), (0, 6), "Incorrect module name")],
         )
         .await;
 
-        db.add_document(
+        db.append_document_diagnostics(
             "file://mod2.rs",
-            Document {
-                text: "module 2".to_string(),
-                diagnostics: vec![
-                    create_diagnostic((0, 0), (0, 6), "Incorrect module name"),
-                    create_diagnostic((0, 7), (0, 8), "Unexpected token"),
-                ],
-            },
+            &vec![
+                create_diagnostic((0, 0), (0, 6), "Incorrect module name"),
+                create_diagnostic((0, 7), (0, 8), "Unexpected token"),
+            ],
         )
         .await;
 
@@ -171,7 +184,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_empty_database() {
-        let db = DocumentDatabase::default();
+        let db = InMemoryDocumentDatabase::default();
 
         let all_diagnostics: Vec<_> = db.all_diagnostics().await.collect();
         assert!(all_diagnostics.is_empty());
