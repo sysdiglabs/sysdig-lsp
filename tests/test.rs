@@ -40,8 +40,8 @@ impl TestClient {
         &self.recorder
     }
 
-    pub fn image_scanner(&self) -> &TestImageScanner {
-        &self.image_scanner
+    pub fn image_scanner(&mut self) -> &mut TestImageScanner {
+        &mut self.image_scanner
     }
 
     pub async fn initialize_lsp(&mut self) -> InitializeResult {
@@ -165,28 +165,45 @@ impl TestClientRecorder {
 
 #[derive(Default, Clone)]
 pub struct TestImageScanner {
-    image_scanned: Arc<Mutex<String>>,
+    images_scanned: Arc<Mutex<Vec<String>>>,
     scan_result_to_return: Arc<Mutex<Option<ImageScanResult>>>,
 }
 
 #[async_trait::async_trait]
 impl ImageScanner for TestImageScanner {
-    async fn scan_image(&self, image_pull_string: &str) -> Result<ImageScanResult, ImageScanError> {
-        *self.image_scanned.lock().await = image_pull_string.to_string();
+    async fn scan_image(
+        &mut self,
+        image_pull_string: &str,
+    ) -> Result<ImageScanResult, ImageScanError> {
+        self.images_scanned
+            .lock()
+            .await
+            .push(image_pull_string.to_string());
 
-        if let Some(scan_result) = self.scan_result_to_return.lock().await.as_ref() {
-            return Ok(scan_result.clone());
+        if let Some(&scan_result) = self.scan_result_to_return.lock().await.as_ref() {
+            return Ok(scan_result);
         }
 
-        panic!("scan result to return has not been defined")
+        panic!(
+            "scan result to return has not been defined: {:?}",
+            self.scan_result_to_return
+        )
     }
 }
 
 impl TestImageScanner {
-    pub async fn set_scan_result_to_return(&self, scan_result_to_return: ImageScanResult) {
+    pub async fn set_scan_result_to_return(&mut self, scan_result_to_return: ImageScanResult) {
         self.scan_result_to_return
             .lock()
             .await
             .replace(scan_result_to_return);
+    }
+
+    pub async fn last_image_scanned(&self) -> Option<String> {
+        self.images_scanned.lock().await.last().cloned()
+    }
+
+    pub async fn num_scans_executed(&self) -> usize {
+        self.images_scanned.lock().await.len()
     }
 }

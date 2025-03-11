@@ -12,7 +12,7 @@ impl SysdigImageScanner {
 #[async_trait::async_trait]
 impl ImageScanner for SysdigImageScanner {
     async fn scan_image(
-        &self,
+        &mut self,
         _image_pull_string: &str,
     ) -> Result<ImageScanResult, ImageScanError> {
         unimplemented!();

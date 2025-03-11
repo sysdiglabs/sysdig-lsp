@@ -108,6 +108,11 @@ async fn when_the_client_executes_the_scan_image_code_action_it_receives_the_vul
         received_diagnostics.first().unwrap(),
         &Diagnostic { range: Range { start: Position { line: 0, character: 0 }, end: Position { line: 0, character: 4294967295 } }, severity: Some(DiagnosticSeverity::ERROR), message: "Vulnerabilities found for alpine: 1 Critical, 2 High, 6 Medium, 10 Low, 50 Negligible".to_owned(), ..Default::default() }
     );
+    assert_eq!(
+        client.image_scanner().last_image_scanned().await,
+        Some("alpine".to_owned())
+    );
+    assert_eq!(client.image_scanner().num_scans_executed().await, 1);
 }
 
 #[tokio::test]
@@ -155,4 +160,9 @@ async fn when_the_client_executes_the_scan_image_multiple_times_it_receives_the_
         received_diagnostics.first().unwrap(),
         &Diagnostic { range: Range { start: Position { line: 0, character: 0 }, end: Position { line: 0, character: 4294967295 } }, severity: Some(DiagnosticSeverity::ERROR), message: "Vulnerabilities found for alpine: 1 Critical, 2 High, 6 Medium, 10 Low, 50 Negligible".to_owned(), ..Default::default() }
     );
+    assert_eq!(
+        client.image_scanner().last_image_scanned().await,
+        Some("alpine".to_owned())
+    );
+    assert_eq!(client.image_scanner().num_scans_executed().await, 2);
 }

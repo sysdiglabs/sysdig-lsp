@@ -1,3 +1,4 @@
+use tokio::sync::Mutex;
 use tower_lsp::{
     jsonrpc::{Error, ErrorCode, Result},
     lsp_types::{Diagnostic, DiagnosticSeverity, MessageType, Position, Range},
@@ -7,7 +8,7 @@ use super::{ImageScanner, InMemoryDocumentDatabase, LSPClient};
 
 pub struct CommandExecutor<C, S> {
     client: C,
-    image_scanner: S,
+    image_scanner: Mutex<S>,
     document_database: InMemoryDocumentDatabase,
 }
 
@@ -15,7 +16,7 @@ impl<C, S> CommandExecutor<C, S> {
     pub fn new(client: C, image_scanner: S, document_database: InMemoryDocumentDatabase) -> Self {
         Self {
             client,
-            image_scanner,
+            image_scanner: Mutex::new(image_scanner),
             document_database,
         }
     }
@@ -84,6 +85,8 @@ where
 
         let scan_result = self
             .image_scanner
+            .lock()
+            .await
             .scan_image(image_for_selected_line)
             .await
             .map_err(|e| Error {
