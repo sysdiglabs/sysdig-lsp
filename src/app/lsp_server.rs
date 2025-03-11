@@ -104,34 +104,51 @@ where
     }
 
     async fn code_action(&self, params: CodeActionParams) -> Result<Option<CodeActionResponse>> {
-        let content = self
+        let Some(content) = self
             .query_executor
             .get_document_text(params.text_document.uri.as_str())
             .await
-            .ok_or(lsp_error(
+        else {
+            return Err(lsp_error(
                 ErrorCode::InternalError,
                 format!(
                     "unable to extract document content for document: {}",
                     &params.text_document.uri
                 ),
-            ))?;
+            ));
+        };
 
-        if let Some(line) = content.lines().nth(params.range.start.line as usize) {
-            if line.starts_with("FROM ") {
-                let action = Command {
-                    title: "Run function".to_string(),
-                    command: SupportedCommands::ExecuteScan.to_string(),
-                    arguments: Some(vec![
-                        json!(params.text_document.uri),
-                        json!(params.range.start.line),
-                    ]),
-                };
+        let Some(last_line_starting_with_from_statement) = content
+            .lines()
+            .enumerate()
+            .filter(|(_, line)| line.trim_start().starts_with("FROM "))
+            .map(|(line_num, _)| line_num)
+            .last()
+        else {
+            return Ok(None);
+        };
 
-                return Ok(Some(vec![CodeActionOrCommand::Command(action)]));
-            }
+        let Ok(line_selected_as_usize) = usize::try_from(params.range.start.line) else {
+            return Err(lsp_error(
+                ErrorCode::InternalError,
+                format!("unable to parse u32 as usize: {}", params.range.start.line),
+            ));
+        };
+
+        if last_line_starting_with_from_statement == line_selected_as_usize {
+            let action = Command {
+                title: "Run function".to_string(),
+                command: SupportedCommands::ExecuteScan.to_string(),
+                arguments: Some(vec![
+                    json!(params.text_document.uri),
+                    json!(line_selected_as_usize),
+                ]),
+            };
+
+            return Ok(Some(vec![CodeActionOrCommand::Command(action)]));
         }
 
-        Ok(None)
+        return Ok(None);
     }
 
     async fn execute_command(&self, params: ExecuteCommandParams) -> Result<Option<Value>> {
