@@ -13,6 +13,7 @@
       overlays.default = final: prev: {
         sysdig-lsp = prev.callPackage ./package.nix { };
       };
+
       flake = flake-utils.lib.eachDefaultSystem (
         system:
         let
@@ -40,11 +41,13 @@
                 cargo-nextest
                 clippy
                 just
-                rust-analyzer # rust lsp
-                lldb # rust debugger
+                rust-analyzer
+                lldb
                 pre-commit
                 sysdig-cli-scanner
               ];
+
+              inputsFrom = [ sysdig-lsp ];
 
               shellHook = ''
                 pre-commit install
