@@ -1,4 +1,5 @@
 mod commands;
+mod component_factory;
 mod document_database;
 mod lsp_client;
 mod lsp_server;

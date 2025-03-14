@@ -11,7 +11,7 @@ use thiserror::Error;
 use tokio::process::Command;
 
 #[derive(Error, Debug)]
-enum ScannerBinaryManagerError {
+pub(in crate::infra) enum ScannerBinaryManagerError {
     #[error("operating system is not supported, current supported systems are linux and darwin")]
     UnsupportedOS,
 
@@ -37,7 +37,8 @@ enum ScannerBinaryManagerError {
     HTTPError(#[from] reqwest::Error),
 }
 
-struct ScannerBinaryManager;
+#[derive(Clone, Default)]
+pub(super) struct ScannerBinaryManager;
 
 impl ScannerBinaryManager {
     const fn version(&self) -> Version {

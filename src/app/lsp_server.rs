@@ -11,12 +11,14 @@ use tower_lsp::lsp_types::{
 use tower_lsp::LanguageServer;
 
 use super::commands::CommandExecutor;
+use super::component_factory::ComponentFactory;
 use super::queries::QueryExecutor;
 use super::{ImageScanner, InMemoryDocumentDatabase, LSPClient};
 
-pub struct LSPServer<Client, S> {
-    command_executor: CommandExecutor<Client, S>,
+pub struct LSPServer<C, S> {
+    command_executor: CommandExecutor<C, S>,
     query_executor: QueryExecutor,
+    component_factory: ComponentFactory,
 }
 
 impl<C, S> LSPServer<C, S> {
@@ -30,7 +32,13 @@ impl<C, S> LSPServer<C, S> {
                 document_database.clone(),
             ),
             query_executor: QueryExecutor::new(document_database.clone()),
+            component_factory: ComponentFactory::uninit(), // to be initialized in the initialize method of the LSP
         }
+    }
+
+    async fn initialize_component_factory_with(&self, config: &Value) -> Result<()> {
+        let _ = config;
+        Ok(())
     }
 }
 
@@ -63,7 +71,17 @@ where
     C: LSPClient + Send + Sync + 'static,
     S: ImageScanner + Send + Sync + 'static,
 {
-    async fn initialize(&self, _: InitializeParams) -> Result<InitializeResult> {
+    async fn initialize(&self, initialize_params: InitializeParams) -> Result<InitializeResult> {
+        let Some(config) = initialize_params.initialization_options else {
+            return Err(Error {
+                code: ErrorCode::InvalidParams,
+                message: "expected parameters to configure the LSP, received nothing".into(),
+                data: None,
+            });
+        };
+
+        self.initialize_component_factory_with(&config).await?;
+
         Ok(InitializeResult {
             capabilities: ServerCapabilities {
                 text_document_sync: Some(TextDocumentSyncCapability::Kind(

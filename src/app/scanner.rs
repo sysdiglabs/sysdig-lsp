@@ -1,3 +1,5 @@
+use std::error::Error;
+
 use thiserror::Error;
 
 #[async_trait::async_trait]
@@ -32,6 +34,9 @@ pub struct Vulnerabilities {
 
 #[derive(Error, Debug)]
 pub enum ImageScanError {
+    #[error("error in the internal scanner execution: {0}")]
+    InternalScannerError(Box<dyn Error>),
+
     #[error("unknown error")]
-    Unknown = 0,
+    Unknown(#[from] Box<dyn Error>),
 }

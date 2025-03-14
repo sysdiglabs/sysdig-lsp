@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use std::fmt::Display;
 use std::sync::Arc;
 
+use serde_json::json;
 use sysdig_lsp::app::{ImageScanError, ImageScanResult, ImageScanner, LSPClient, LSPServer};
 use tokio::sync::Mutex;
 use tower_lsp::lsp_types::{
@@ -47,7 +48,10 @@ impl TestClient {
     pub async fn initialize_lsp(&mut self) -> InitializeResult {
         let result = self
             .server
-            .initialize(InitializeParams::default())
+            .initialize(InitializeParams {
+                initialization_options: Some(json!({})),
+                ..Default::default()
+            })
             .await
             .expect("initialize failed");
 
