@@ -39,6 +39,7 @@
                 cargo-audit
                 cargo-watch
                 cargo-nextest
+                cargo-expand
                 clippy
                 just
                 rust-analyzer

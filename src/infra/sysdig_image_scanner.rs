@@ -51,12 +51,12 @@ impl SysdigImageScanner {
         Self {
             url,
             api_token,
-            scanner_binary_manager: ScannerBinaryManager,
+            scanner_binary_manager: ScannerBinaryManager::default(),
         }
     }
 
     async fn scan(
-        &self,
+        &mut self,
         image_pull_string: &str,
     ) -> Result<SysdigImageScannerReport, SysdigImageScannerError> {
         let path_to_cli = self
@@ -115,8 +115,8 @@ impl ImageScanner for SysdigImageScanner {
 }
 
 #[cfg(test)]
+#[serial_test::file_serial]
 mod tests {
-
     use super::{SysdigAPIToken, SysdigImageScanner};
 
     #[tokio::test]
@@ -124,7 +124,7 @@ mod tests {
         let sysdig_url = "https://us2.app.sysdig.com".to_string();
         let sysdig_secure_token = SysdigAPIToken(std::env::var("SECURE_API_TOKEN").unwrap());
 
-        let scanner = SysdigImageScanner::new(sysdig_url, sysdig_secure_token);
+        let mut scanner = SysdigImageScanner::new(sysdig_url, sysdig_secure_token);
 
         let report = scanner.scan("ubuntu:22.04").await.unwrap();
 

@@ -38,7 +38,7 @@ pub(in crate::infra) enum ScannerBinaryManagerError {
 }
 
 #[derive(Clone, Default)]
-pub(super) struct ScannerBinaryManager;
+pub(super) struct ScannerBinaryManager {}
 
 impl ScannerBinaryManager {
     const fn version(&self) -> Version {
@@ -46,7 +46,7 @@ impl ScannerBinaryManager {
     }
 
     pub async fn install_expected_version_if_not_present(
-        &self,
+        &mut self,
     ) -> Result<PathBuf, ScannerBinaryManagerError> {
         let expected_version = self.version();
         let binary_path = self.binary_path_for_version(&expected_version);
@@ -184,27 +184,21 @@ impl ScannerBinaryManager {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
-
-    use semver::Version;
-    use tokio::sync::Mutex;
-
     use super::ScannerBinaryManager;
-
-    lazy_static::lazy_static! {
-        static ref TEST_LOCK: Arc<Mutex<()>> = Arc::new(Mutex::new(()));
-    }
+    use core::panic;
+    use semver::Version;
+    use serial_test::file_serial;
 
     #[tokio::test]
     async fn it_gets_the_wanted_version() {
-        let mgr = ScannerBinaryManager;
+        let mgr = ScannerBinaryManager::default();
 
         assert_eq!(mgr.version().to_string(), "1.20.0");
     }
 
     #[tokio::test]
     async fn it_retrieves_the_binary_path() {
-        let mgr = ScannerBinaryManager;
+        let mgr = ScannerBinaryManager::default();
 
         assert!(mgr
             .binary_path_for_version(&Version::new(1, 20, 0))
@@ -213,20 +207,22 @@ mod tests {
 
     #[tokio::test]
     async fn it_will_download_from_the_correct_url() {
-        let mgr = ScannerBinaryManager;
+        let mgr = ScannerBinaryManager::default();
 
         assert_eq!(mgr.download_url(&Version::new(1, 20, 0)).unwrap(), "https://download.sysdig.com/scanning/bin/sysdig-cli-scanner/1.20.0/linux/amd64/sysdig-cli-scanner");
     }
 
     #[tokio::test]
+    #[file_serial]
     async fn it_downloads_if_it_doesnt_exist() {
-        let _guard = TEST_LOCK.lock().await;
+        let mut mgr = ScannerBinaryManager::default();
 
-        let mgr = ScannerBinaryManager;
         let binary_path = mgr.binary_path_for_version(&mgr.version());
         let _ = tokio::fs::remove_file(&binary_path).await;
 
-        mgr.install_expected_version_if_not_present().await.unwrap();
+        mgr.install_expected_version_if_not_present()
+            .await
+            .unwrap_or_else(|e| panic!("{}", e));
 
         assert_eq!(
             mgr.get_current_installed_version_from(&binary_path)
@@ -238,14 +234,18 @@ mod tests {
     }
 
     #[tokio::test]
+    #[file_serial]
     async fn it_doesnt_download_if_it_exists() {
-        let _guard = TEST_LOCK.lock().await;
+        let mut mgr = ScannerBinaryManager::default();
 
-        let mgr = ScannerBinaryManager;
         let binary_path = mgr.binary_path_for_version(&mgr.version());
 
-        mgr.install_expected_version_if_not_present().await.unwrap();
-        mgr.install_expected_version_if_not_present().await.unwrap();
+        mgr.install_expected_version_if_not_present()
+            .await
+            .unwrap_or_else(|e| panic!("{}", e));
+        mgr.install_expected_version_if_not_present()
+            .await
+            .unwrap_or_else(|e| panic!("{}", e));
 
         assert_eq!(
             mgr.get_current_installed_version_from(&binary_path)
