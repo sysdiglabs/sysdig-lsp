@@ -1,7 +1,8 @@
-use std::env::VarError;
+use std::{env::VarError, sync::Arc};
 
 use serde::Deserialize;
 use thiserror::Error;
+use tokio::sync::{OwnedRwLockReadGuard, RwLock};
 
 use crate::infra::{SysdigAPIToken, SysdigImageScanner};
 
@@ -22,7 +23,7 @@ pub struct SysdigConfig {
 pub struct ComponentFactory {
     config: Option<Config>,
 
-    scanner: Option<SysdigImageScanner>,
+    scanner: Arc<RwLock<Option<SysdigImageScanner>>>,
 }
 
 #[derive(Error, Debug)]
@@ -38,23 +39,28 @@ impl ComponentFactory {
     pub fn uninit() -> Self {
         Self {
             config: None,
-            scanner: None,
+            scanner: Default::default(),
         }
     }
 
-    pub fn is_initialized(&self) -> bool {
+    pub async fn is_initialized(&self) -> bool {
         self.config.is_some()
     }
 
-    pub fn initialize_with(&mut self, config: Config) {
+    pub async fn initialize_with(&mut self, config: Config) {
         self.config.replace(config);
-        self.scanner.take();
+        self.scanner.write().await.take();
     }
 
-    pub fn image_scanner(&mut self) -> Result<&mut impl ImageScanner, ComponentFactoryError> {
-        if self.scanner.is_some() {
-            return Ok(self.scanner.as_mut().unwrap());
-        }
+    pub async fn image_scanner(
+        &self,
+    ) -> Result<OwnedRwLockReadGuard<Option<impl ImageScanner>>, ComponentFactoryError> {
+        {
+            let scanner = self.scanner.clone().read_owned().await;
+            if scanner.is_some() {
+                return Ok(scanner);
+            }
+        };
 
         let Some(config) = self.config.clone() else {
             return Err(ComponentFactoryError::ConfigurationNotProvided);
@@ -66,12 +72,12 @@ impl ComponentFactory {
             .map(Ok)
             .unwrap_or_else(|| std::env::var("SECURE_API_TOKEN"))?;
 
-        self.scanner.replace(SysdigImageScanner::new(
+        self.scanner.write().await.replace(SysdigImageScanner::new(
             config.sysdig.api_url,
             SysdigAPIToken(token),
         ));
 
-        Ok(self.scanner.as_mut().unwrap())
+        Ok(self.scanner.clone().read_owned().await)
     }
 }
 
@@ -79,19 +85,19 @@ impl ComponentFactory {
 mod test {
     use super::{ComponentFactory, Config};
 
-    #[test]
-    fn it_loads_the_factory_uninit() {
+    #[tokio::test]
+    async fn it_loads_the_factory_uninit() {
         let factory = ComponentFactory::uninit();
 
-        assert!(!factory.is_initialized());
+        assert!(!factory.is_initialized().await);
     }
 
-    #[test]
-    fn it_creates_a_scanner_with_the_provided_config() {
+    #[tokio::test]
+    async fn it_creates_a_scanner_with_the_provided_config() {
         let mut factory = ComponentFactory::uninit();
 
-        factory.initialize_with(Config::default());
+        factory.initialize_with(Config::default()).await;
 
-        assert!(factory.is_initialized());
+        assert!(factory.is_initialized().await);
     }
 }

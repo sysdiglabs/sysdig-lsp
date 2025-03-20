@@ -55,7 +55,11 @@ where
             ));
         };
 
-        self.component_factory.write().await.initialize_with(config);
+        self.component_factory
+            .write()
+            .await
+            .initialize_with(config)
+            .await;
         self.command_executor
             .log_message(MessageType::INFO, "updated configuration")
             .await;
@@ -237,13 +241,14 @@ where
                     .and_then(|x| u32::try_from(x).ok())
                     .unwrap_or_default();
 
-                let mut component_factory_lock = self.component_factory.write().await;
+                let component_factory_lock = self.component_factory.read().await;
                 let image_scanner = component_factory_lock
                     .image_scanner()
+                    .await
                     .expect("unable to create image scanner");
 
                 self.command_executor
-                    .scan_image_from_file(uri, line, image_scanner)
+                    .scan_image_from_file(uri, line, image_scanner.as_ref().unwrap())
                     .await?;
                 Ok(None)
             }

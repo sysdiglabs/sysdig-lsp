@@ -67,7 +67,7 @@ where
         &self,
         uri: &str,
         line: u32,
-        image_scanner: &mut S,
+        image_scanner: &S,
     ) -> Result<()> {
         let document_text = self
             .document_database

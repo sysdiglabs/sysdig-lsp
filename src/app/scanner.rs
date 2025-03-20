@@ -4,10 +4,7 @@ use thiserror::Error;
 
 #[async_trait::async_trait]
 pub trait ImageScanner {
-    async fn scan_image(
-        &mut self,
-        image_pull_string: &str,
-    ) -> Result<ImageScanResult, ImageScanError>;
+    async fn scan_image(&self, image_pull_string: &str) -> Result<ImageScanResult, ImageScanError>;
 }
 
 #[derive(Clone, Copy, Debug)]

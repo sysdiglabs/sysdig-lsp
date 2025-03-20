@@ -1,8 +1,10 @@
 #![allow(dead_code)]
 
+use std::sync::Arc;
+
 use itertools::Itertools;
 use thiserror::Error;
-use tokio::process::Command;
+use tokio::{process::Command, sync::Mutex};
 
 use crate::{
     app::{ImageScanError, ImageScanResult, ImageScanner, Vulnerabilities},
@@ -18,7 +20,7 @@ use super::{
 pub struct SysdigImageScanner {
     url: String,
     api_token: SysdigAPIToken,
-    scanner_binary_manager: ScannerBinaryManager,
+    scanner_binary_manager: Arc<Mutex<ScannerBinaryManager>>,
 }
 
 #[derive(Clone)]
@@ -55,21 +57,24 @@ impl SysdigImageScanner {
         Self {
             url,
             api_token,
-            scanner_binary_manager: ScannerBinaryManager::default(),
+            scanner_binary_manager: Default::default(),
         }
     }
 
     async fn scan(
-        &mut self,
+        &self,
         image_pull_string: &str,
     ) -> Result<SysdigImageScannerReport, SysdigImageScannerError> {
         let path_to_cli = self
             .scanner_binary_manager
+            .lock()
+            .await
             .install_expected_version_if_not_present()
             .await?;
 
         let args = [
             image_pull_string,
+            "--no-cache", // needed for concurrent scanning execution
             "--output=json",
             "--output-schema=v1",
             "--separate-by-layer",
@@ -108,10 +113,7 @@ impl SysdigImageScanner {
 
 #[async_trait::async_trait]
 impl ImageScanner for SysdigImageScanner {
-    async fn scan_image(
-        &mut self,
-        image_pull_string: &str,
-    ) -> Result<ImageScanResult, ImageScanError> {
+    async fn scan_image(&self, image_pull_string: &str) -> Result<ImageScanResult, ImageScanError> {
         let report = self.scan(image_pull_string).await?;
 
         let vuln_count_by_severity = report
@@ -171,7 +173,7 @@ mod tests {
         let sysdig_url = "https://us2.app.sysdig.com".to_string();
         let sysdig_secure_token = SysdigAPIToken(std::env::var("SECURE_API_TOKEN").unwrap());
 
-        let mut scanner = SysdigImageScanner::new(sysdig_url, sysdig_secure_token);
+        let scanner = SysdigImageScanner::new(sysdig_url, sysdig_secure_token);
 
         let report = scanner.scan("ubuntu:22.04").await.unwrap();
 
@@ -185,7 +187,7 @@ mod tests {
         let sysdig_url = "https://us2.app.sysdig.com".to_string();
         let sysdig_secure_token = SysdigAPIToken(std::env::var("SECURE_API_TOKEN").unwrap());
 
-        let mut scanner = SysdigImageScanner::new(sysdig_url, sysdig_secure_token);
+        let scanner = SysdigImageScanner::new(sysdig_url, sysdig_secure_token);
 
         let report = scanner.scan_image("ubuntu:22.04").await.unwrap();
 
