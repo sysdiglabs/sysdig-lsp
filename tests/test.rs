@@ -4,31 +4,25 @@ use std::fmt::Display;
 use std::sync::Arc;
 
 use serde_json::json;
-use sysdig_lsp::app::{ImageScanError, ImageScanResult, ImageScanner, LSPClient, LSPServer};
+use sysdig_lsp::app::{LSPClient, LSPServer};
 use tokio::sync::Mutex;
 use tower_lsp::lsp_types::{
-    CodeActionOrCommand, CodeActionParams, Diagnostic, DidOpenTextDocumentParams,
-    ExecuteCommandParams, InitializeParams, InitializeResult, InitializedParams, MessageType,
-    Position, Range, TextDocumentIdentifier, TextDocumentItem, Url,
+    CodeActionOrCommand, CodeActionParams, Diagnostic, DidOpenTextDocumentParams, InitializeParams,
+    InitializeResult, InitializedParams, MessageType, Position, Range, TextDocumentIdentifier,
+    TextDocumentItem, Url,
 };
 use tower_lsp::LanguageServer;
 
 pub struct TestClient {
-    server: LSPServer<TestClientRecorder, TestImageScanner>,
+    server: LSPServer<TestClientRecorder>,
     recorder: TestClientRecorder,
-    image_scanner: TestImageScanner,
 }
 
 impl TestClient {
     pub fn new() -> TestClient {
         let recorder = TestClientRecorder::default();
-        let image_scanner = TestImageScanner::default();
-        let server = LSPServer::new(recorder.clone(), image_scanner.clone());
-        TestClient {
-            server,
-            recorder,
-            image_scanner,
-        }
+        let server = LSPServer::new(recorder.clone());
+        TestClient { server, recorder }
     }
 
     pub async fn new_initialized() -> TestClient {
@@ -41,15 +35,15 @@ impl TestClient {
         &self.recorder
     }
 
-    pub fn image_scanner(&mut self) -> &mut TestImageScanner {
-        &mut self.image_scanner
-    }
-
     pub async fn initialize_lsp(&mut self) -> InitializeResult {
         let result = self
             .server
             .initialize(InitializeParams {
-                initialization_options: Some(json!({})),
+                initialization_options: Some(json!({"sysdig":
+                    {
+                        "api_url": "https://us2.app.sysdig.com"
+                    }
+                })),
                 ..Default::default()
             })
             .await
@@ -97,23 +91,6 @@ impl TestClient {
                 )
             })
     }
-
-    pub async fn execute_action(&mut self, action: &str, args: &[serde_json::Value]) {
-        self.server
-            .execute_command(ExecuteCommandParams {
-                command: action.to_string(),
-                arguments: args.to_vec(),
-                work_done_progress_params: Default::default(),
-            })
-            .await
-            .unwrap_or_else(|_| {
-                panic!(
-                    "unable to execute action {} with args {}",
-                    action,
-                    serde_json::to_string_pretty(args).unwrap()
-                )
-            });
-    }
 }
 
 fn url_from(filename: &str) -> Url {
@@ -129,6 +106,7 @@ impl Default for TestClient {
 #[derive(Default, Clone)]
 pub struct TestClientRecorder {
     logged_messages: Arc<Mutex<Vec<(MessageType, String)>>>,
+    messages_shown: Arc<Mutex<Vec<(MessageType, String)>>>,
     diagnostics_for_each_file: Arc<Mutex<HashMap<String, Vec<Diagnostic>>>>,
 }
 
@@ -136,6 +114,13 @@ pub struct TestClientRecorder {
 impl LSPClient for TestClientRecorder {
     async fn log_message<M: Display + Send>(&self, message_type: MessageType, message: M) {
         self.logged_messages
+            .lock()
+            .await
+            .push((message_type, message.to_string()));
+    }
+
+    async fn show_message<M: Display + Send>(&self, message_type: MessageType, message: M) {
+        self.messages_shown
             .lock()
             .await
             .push((message_type, message.to_string()));
@@ -155,59 +140,7 @@ impl LSPClient for TestClientRecorder {
 }
 
 impl TestClientRecorder {
-    pub async fn diagnostics_displayed_for_file(&self, filename: &str) -> Option<Vec<Diagnostic>> {
-        self.diagnostics_for_each_file
-            .lock()
-            .await
-            .get(filename)
-            .cloned()
-    }
-    pub async fn received_log_messages(&self) -> Vec<(MessageType, String)> {
-        self.logged_messages.lock().await.clone()
-    }
-}
-
-#[derive(Default, Clone)]
-pub struct TestImageScanner {
-    images_scanned: Arc<Mutex<Vec<String>>>,
-    scan_result_to_return: Arc<Mutex<Option<ImageScanResult>>>,
-}
-
-#[async_trait::async_trait]
-impl ImageScanner for TestImageScanner {
-    async fn scan_image(
-        &mut self,
-        image_pull_string: &str,
-    ) -> Result<ImageScanResult, ImageScanError> {
-        self.images_scanned
-            .lock()
-            .await
-            .push(image_pull_string.to_string());
-
-        if let Some(&scan_result) = self.scan_result_to_return.lock().await.as_ref() {
-            return Ok(scan_result);
-        }
-
-        panic!(
-            "scan result to return has not been defined: {:?}",
-            self.scan_result_to_return
-        )
-    }
-}
-
-impl TestImageScanner {
-    pub async fn set_scan_result_to_return(&mut self, scan_result_to_return: ImageScanResult) {
-        self.scan_result_to_return
-            .lock()
-            .await
-            .replace(scan_result_to_return);
-    }
-
-    pub async fn last_image_scanned(&self) -> Option<String> {
-        self.images_scanned.lock().await.last().cloned()
-    }
-
-    pub async fn num_scans_executed(&self) -> usize {
-        self.images_scanned.lock().await.len()
+    pub async fn messages_shown(&self) -> Vec<(MessageType, String)> {
+        self.messages_shown.lock().await.clone()
     }
 }

@@ -1,3 +1,3 @@
-FROM alpine as builder
+FROM nginx:latest
 
-run apk add nginx
+RUN apk add nginx

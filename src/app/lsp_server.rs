@@ -1,43 +1,64 @@
 use std::borrow::Cow;
 
 use serde_json::{json, Value};
+use tokio::sync::RwLock;
 use tower_lsp::jsonrpc::{Error, ErrorCode, Result};
 use tower_lsp::lsp_types::{
     CodeActionOrCommand, CodeActionParams, CodeActionProviderCapability, CodeActionResponse,
-    Command, DidChangeTextDocumentParams, DidOpenTextDocumentParams, ExecuteCommandOptions,
-    ExecuteCommandParams, InitializeParams, InitializeResult, InitializedParams, MessageType,
-    ServerCapabilities, TextDocumentSyncCapability, TextDocumentSyncKind,
+    Command, DidChangeConfigurationParams, DidChangeTextDocumentParams, DidOpenTextDocumentParams,
+    ExecuteCommandOptions, ExecuteCommandParams, InitializeParams, InitializeResult,
+    InitializedParams, MessageType, ServerCapabilities, TextDocumentSyncCapability,
+    TextDocumentSyncKind,
 };
 use tower_lsp::LanguageServer;
+use tracing::info;
 
 use super::commands::CommandExecutor;
-use super::component_factory::ComponentFactory;
+use super::component_factory::{ComponentFactory, Config};
 use super::queries::QueryExecutor;
-use super::{ImageScanner, InMemoryDocumentDatabase, LSPClient};
+use super::{InMemoryDocumentDatabase, LSPClient};
 
-pub struct LSPServer<C, S> {
-    command_executor: CommandExecutor<C, S>,
+pub struct LSPServer<C> {
+    command_executor: CommandExecutor<C>,
     query_executor: QueryExecutor,
-    component_factory: ComponentFactory,
+    component_factory: RwLock<ComponentFactory>,
 }
 
-impl<C, S> LSPServer<C, S> {
-    pub fn new(client: C, image_scanner: S) -> LSPServer<C, S> {
+impl<C> LSPServer<C> {
+    pub fn new(client: C) -> LSPServer<C> {
         let document_database = InMemoryDocumentDatabase::default();
 
         LSPServer {
-            command_executor: CommandExecutor::new(
-                client,
-                image_scanner,
-                document_database.clone(),
-            ),
+            command_executor: CommandExecutor::new(client, document_database.clone()),
             query_executor: QueryExecutor::new(document_database.clone()),
-            component_factory: ComponentFactory::uninit(), // to be initialized in the initialize method of the LSP
+            component_factory: RwLock::new(ComponentFactory::uninit()), // to be initialized in the initialize method of the LSP
         }
     }
+}
 
+impl<C> LSPServer<C>
+where
+    C: LSPClient + Send + Sync + 'static,
+{
     async fn initialize_component_factory_with(&self, config: &Value) -> Result<()> {
-        let _ = config;
+        self.command_executor
+            .log_message(
+                MessageType::INFO,
+                "attempting to initialize component factory with config",
+            )
+            .await;
+
+        let Ok(config) = serde_json::from_value::<Config>(config.clone()) else {
+            return Err(lsp_error(
+                ErrorCode::InternalError,
+                format!("unable to transform json into config: {}", config),
+            ));
+        };
+
+        self.component_factory.write().await.initialize_with(config);
+        self.command_executor
+            .log_message(MessageType::INFO, "updated configuration")
+            .await;
         Ok(())
     }
 }
@@ -66,12 +87,12 @@ impl TryFrom<&str> for SupportedCommands {
 }
 
 #[async_trait::async_trait]
-impl<C, S> LanguageServer for LSPServer<C, S>
+impl<C> LanguageServer for LSPServer<C>
 where
     C: LSPClient + Send + Sync + 'static,
-    S: ImageScanner + Send + Sync + 'static,
 {
     async fn initialize(&self, initialize_params: InitializeParams) -> Result<InitializeResult> {
+        info!("Initializing");
         let Some(config) = initialize_params.initialization_options else {
             return Err(Error {
                 code: ErrorCode::InvalidParams,
@@ -99,12 +120,24 @@ where
     }
 
     async fn initialized(&self, _: InitializedParams) {
+        info!("Initialized");
         self.command_executor
-            .log_message(MessageType::INFO, "Sysdig LSP initialized!")
+            .show_message(MessageType::INFO, "Sysdig LSP initialized!")
+            .await;
+        self.command_executor
+            .show_message(MessageType::INFO, "Sysdig LSP initialized!")
+            .await;
+    }
+
+    async fn did_change_configuration(&self, params: DidChangeConfigurationParams) {
+        info!("Config changed");
+        let _ = self
+            .initialize_component_factory_with(&params.settings)
             .await;
     }
 
     async fn did_open(&self, params: DidOpenTextDocumentParams) {
+        info!("File opened");
         self.command_executor
             .update_document_with_text(
                 params.text_document.uri.as_str(),
@@ -114,6 +147,7 @@ where
     }
 
     async fn did_change(&self, params: DidChangeTextDocumentParams) {
+        info!("File changed");
         if let Some(change) = params.content_changes.into_iter().last() {
             self.command_executor
                 .update_document_with_text(params.text_document.uri.as_str(), &change.text)
@@ -122,6 +156,7 @@ where
     }
 
     async fn code_action(&self, params: CodeActionParams) -> Result<Option<CodeActionResponse>> {
+        info!("Code action");
         let Some(content) = self
             .query_executor
             .get_document_text(params.text_document.uri.as_str())
@@ -155,7 +190,7 @@ where
 
         if last_line_starting_with_from_statement == line_selected_as_usize {
             let action = Command {
-                title: "Run function".to_string(),
+                title: "Scan Image".to_string(),
                 command: SupportedCommands::ExecuteScan.to_string(),
                 arguments: Some(vec![
                     json!(params.text_document.uri),
@@ -202,8 +237,13 @@ where
                     .and_then(|x| u32::try_from(x).ok())
                     .unwrap_or_default();
 
+                let mut component_factory_lock = self.component_factory.write().await;
+                let image_scanner = component_factory_lock
+                    .image_scanner()
+                    .expect("unable to create image scanner");
+
                 self.command_executor
-                    .scan_image_from_file(uri, line)
+                    .scan_image_from_file(uri, line, image_scanner)
                     .await?;
                 Ok(None)
             }

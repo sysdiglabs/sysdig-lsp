@@ -46,6 +46,10 @@
                 lldb
                 pre-commit
                 sysdig-cli-scanner
+
+                kdePackages.kate
+                eclipses.eclipse-sdk
+                jetbrains.idea-community-bin
               ];
 
               inputsFrom = [ sysdig-lsp ];

@@ -1,4 +1,3 @@
-use tokio::sync::Mutex;
 use tower_lsp::{
     jsonrpc::{Error, ErrorCode, Result},
     lsp_types::{Diagnostic, DiagnosticSeverity, MessageType, Position, Range},
@@ -6,17 +5,15 @@ use tower_lsp::{
 
 use super::{ImageScanner, InMemoryDocumentDatabase, LSPClient};
 
-pub struct CommandExecutor<C, S> {
+pub struct CommandExecutor<C> {
     client: C,
-    image_scanner: Mutex<S>,
     document_database: InMemoryDocumentDatabase,
 }
 
-impl<C, S> CommandExecutor<C, S> {
-    pub fn new(client: C, image_scanner: S, document_database: InMemoryDocumentDatabase) -> Self {
+impl<C> CommandExecutor<C> {
+    pub fn new(client: C, document_database: InMemoryDocumentDatabase) -> Self {
         Self {
             client,
-            image_scanner: Mutex::new(image_scanner),
             document_database,
         }
     }
@@ -33,7 +30,7 @@ impl<C, S> CommandExecutor<C, S> {
     }
 }
 
-impl<C, S> CommandExecutor<C, S>
+impl<C> CommandExecutor<C>
 where
     C: LSPClient,
 {
@@ -47,6 +44,10 @@ where
         self.client.log_message(message_type, message).await;
     }
 
+    pub async fn show_message(&self, message_type: MessageType, message: &str) {
+        self.client.show_message(message_type, message).await;
+    }
+
     async fn publish_all_diagnostics(&self) -> Result<()> {
         let all_diagnostics = self.document_database.all_diagnostics().await;
         for (url, diagnostics) in all_diagnostics {
@@ -58,12 +59,16 @@ where
     }
 }
 
-impl<C, S> CommandExecutor<C, S>
+impl<C> CommandExecutor<C>
 where
     C: LSPClient,
-    S: ImageScanner,
 {
-    pub async fn scan_image_from_file(&self, uri: &str, line: u32) -> Result<()> {
+    pub async fn scan_image_from_file<S: ImageScanner>(
+        &self,
+        uri: &str,
+        line: u32,
+        image_scanner: &mut S,
+    ) -> Result<()> {
         let document_text = self
             .document_database
             .read_document_text(uri)
@@ -83,10 +88,19 @@ where
                     data: None,
                 })?;
 
-        let scan_result = self
-            .image_scanner
-            .lock()
-            .await
+        let range_for_selected_line = document_text
+            .lines()
+            .nth(line as usize)
+            .map(|x| x.len() as u32)
+            .unwrap_or(u32::MAX);
+
+        self.show_message(
+            MessageType::INFO,
+            format!("Starting scan of {}...", image_for_selected_line).as_str(),
+        )
+        .await;
+
+        let scan_result = image_scanner
             .scan_image(image_for_selected_line)
             .await
             .map_err(|e| Error {
@@ -95,11 +109,17 @@ where
                 data: None,
             })?;
 
+        self.show_message(
+            MessageType::INFO,
+            format!("Finished scan of {}.", image_for_selected_line).as_str(),
+        )
+        .await;
+
         let diagnostic = {
             let mut diagnostic = Diagnostic {
                 range: Range {
                     start: Position::new(line, 0),
-                    end: Position::new(line, u32::MAX),
+                    end: Position::new(line, range_for_selected_line),
                 },
                 severity: Some(DiagnosticSeverity::HINT),
                 message: "No vulnerabilities found.".to_owned(),
@@ -118,7 +138,7 @@ where
                 );
 
                 diagnostic.severity = Some(if scan_result.is_compliant {
-                    DiagnosticSeverity::WARNING
+                    DiagnosticSeverity::INFORMATION
                 } else {
                     DiagnosticSeverity::ERROR
                 });

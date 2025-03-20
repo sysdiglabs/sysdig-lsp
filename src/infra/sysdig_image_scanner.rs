@@ -1,13 +1,17 @@
 #![allow(dead_code)]
 
+use itertools::Itertools;
 use thiserror::Error;
 use tokio::process::Command;
 
-use crate::app::{ImageScanError, ImageScanResult, ImageScanner};
+use crate::{
+    app::{ImageScanError, ImageScanResult, ImageScanner, Vulnerabilities},
+    infra::sysdig_image_scanner_result::PoliciesGlobalEvaluation,
+};
 
 use super::{
     scanner_binary_manager::{ScannerBinaryManager, ScannerBinaryManagerError},
-    sysdig_image_scanner_result::SysdigImageScannerReport,
+    sysdig_image_scanner_result::{SysdigImageScannerReport, VulnSeverity},
 };
 
 #[derive(Clone)]
@@ -108,15 +112,58 @@ impl ImageScanner for SysdigImageScanner {
         &mut self,
         image_pull_string: &str,
     ) -> Result<ImageScanResult, ImageScanError> {
-        let _ = image_pull_string;
-        todo!()
-        // Ok(self.scan(image_pull_string).await?)
+        let report = self.scan(image_pull_string).await?;
+
+        let vuln_count_by_severity = report
+            .result
+            .as_ref()
+            .and_then(|e| e.vulnerabilities.as_ref())
+            .map(|vulns| vulns.values())
+            .into_iter()
+            .flatten()
+            .counts_by(|e| &e.severity);
+
+        let is_compliant = report
+            .result
+            .as_ref()
+            .and_then(|result| result.policies.as_ref())
+            .and_then(|policies| policies.global_evaluation.as_ref())
+            .map(|global_evaluation| global_evaluation == &PoliciesGlobalEvaluation::Accepted)
+            .unwrap_or(false);
+
+        Ok(ImageScanResult {
+            vulnerabilities: Vulnerabilities {
+                critical: vuln_count_by_severity
+                    .get(&VulnSeverity::Critical)
+                    .cloned()
+                    .unwrap_or_default(),
+                high: vuln_count_by_severity
+                    .get(&VulnSeverity::High)
+                    .cloned()
+                    .unwrap_or_default(),
+                medium: vuln_count_by_severity
+                    .get(&VulnSeverity::Medium)
+                    .cloned()
+                    .unwrap_or_default(),
+                low: vuln_count_by_severity
+                    .get(&VulnSeverity::Low)
+                    .cloned()
+                    .unwrap_or_default(),
+                negligible: vuln_count_by_severity
+                    .get(&VulnSeverity::Negligible)
+                    .cloned()
+                    .unwrap_or_default(),
+            },
+            is_compliant,
+        })
     }
 }
 
 #[cfg(test)]
 #[serial_test::file_serial]
 mod tests {
+    use crate::app::ImageScanner;
+
     use super::{SysdigAPIToken, SysdigImageScanner};
 
     #[tokio::test]
@@ -131,5 +178,22 @@ mod tests {
         assert!(report.info.is_some());
         assert!(report.scanner.is_some());
         assert!(report.result.is_some());
+    }
+
+    #[tokio::test]
+    async fn it_scans_the_ubuntu_image_correctly() {
+        let sysdig_url = "https://us2.app.sysdig.com".to_string();
+        let sysdig_secure_token = SysdigAPIToken(std::env::var("SECURE_API_TOKEN").unwrap());
+
+        let mut scanner = SysdigImageScanner::new(sysdig_url, sysdig_secure_token);
+
+        let report = scanner.scan_image("ubuntu:22.04").await.unwrap();
+
+        assert!(report.vulnerabilities.critical == 0);
+        assert!(report.vulnerabilities.high == 0);
+        assert!(report.vulnerabilities.medium >= 15);
+        assert!(report.vulnerabilities.low >= 32);
+        assert!(report.vulnerabilities.negligible >= 7);
+        assert!(!report.is_compliant);
     }
 }

@@ -68,7 +68,7 @@ pub enum ImageMetadataArchitecture {
     Wasm,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub enum PoliciesGlobalEvaluation {
     Accepted,
@@ -134,7 +134,7 @@ pub enum ScanResultResponseStage {
     Runtime,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "camelCase")]
 pub enum VulnSeverity {
     Critical,
