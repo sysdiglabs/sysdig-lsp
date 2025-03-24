@@ -27,6 +27,11 @@
           packages = with pkgs; {
             inherit sysdig-lsp;
             default = sysdig-lsp;
+
+            sysdig-lsp-linux-amd64 = pkgsCross.gnu64.sysdig-lsp;
+            sysdig-lsp-linux-arm64 = pkgsCross.aarch64-multiplatform.sysdig-lsp;
+            sysdig-lsp-darwin-amd64 = pkgsCross.x86_64-darwin.sysdig-lsp;
+            sysdig-lsp-darwin-arm64 = pkgsCross.aarch64-darwin.sysdig-lsp;
           };
 
           devShells.default =
@@ -46,10 +51,6 @@
                 lldb
                 pre-commit
                 sysdig-cli-scanner
-
-                kdePackages.kate
-                eclipses.eclipse-sdk
-                jetbrains.idea-community-bin
               ];
 
               inputsFrom = [ sysdig-lsp ];
