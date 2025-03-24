@@ -1,12 +1,22 @@
-use sysdig_lsp::app::LSPServer;
+use sysdig_lsp::{app::LSPServer, infra::lsp_logger::LSPLogger};
 use tower_lsp::{LspService, Server};
+use tracing_subscriber::layer::SubscriberExt;
 
 #[tokio::main]
 async fn main() {
-    tracing_subscriber::fmt::init();
     let stdin = tokio::io::stdin();
     let stdout = tokio::io::stdout();
 
-    let (service, messages) = LspService::new(LSPServer::new);
+    let (service, messages) = LspService::new(|client| {
+        let subscriber = tracing_subscriber::registry()
+            .with(LSPLogger::new(client.clone()))
+            .with(tracing_subscriber::fmt::layer());
+
+        tracing::subscriber::set_global_default(subscriber)
+            .expect("setting default subscriber failed");
+
+        LSPServer::new(client)
+    });
+
     Server::new(stdin, stdout, messages).serve(service).await;
 }

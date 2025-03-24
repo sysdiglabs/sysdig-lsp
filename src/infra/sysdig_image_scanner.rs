@@ -1,8 +1,9 @@
 #![allow(dead_code)]
 
-use std::sync::Arc;
+use std::{fmt::Display, sync::Arc};
 
 use itertools::Itertools;
+use serde::Deserialize;
 use thiserror::Error;
 use tokio::{process::Command, sync::Mutex};
 
@@ -23,8 +24,20 @@ pub struct SysdigImageScanner {
     scanner_binary_manager: Arc<Mutex<ScannerBinaryManager>>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Deserialize)]
 pub struct SysdigAPIToken(pub String);
+
+impl std::fmt::Debug for SysdigAPIToken {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("[redacted]")
+    }
+}
+
+impl Display for SysdigAPIToken {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("[redacted]")
+    }
+}
 
 #[derive(Error, Debug)]
 pub(in crate::infra) enum SysdigImageScannerError {

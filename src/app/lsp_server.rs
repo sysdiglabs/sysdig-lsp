@@ -11,7 +11,7 @@ use tower_lsp::lsp_types::{
     TextDocumentSyncKind,
 };
 use tower_lsp::LanguageServer;
-use tracing::info;
+use tracing::{debug, info};
 
 use super::commands::CommandExecutor;
 use super::component_factory::{ComponentFactory, Config};
@@ -41,13 +41,6 @@ where
     C: LSPClient + Send + Sync + 'static,
 {
     async fn initialize_component_factory_with(&self, config: &Value) -> Result<()> {
-        self.command_executor
-            .log_message(
-                MessageType::INFO,
-                "attempting to initialize component factory with config",
-            )
-            .await;
-
         let Ok(config) = serde_json::from_value::<Config>(config.clone()) else {
             return Err(lsp_error(
                 ErrorCode::InternalError,
@@ -55,14 +48,15 @@ where
             ));
         };
 
+        debug!("updating with configuration: {config:?}");
+
         self.component_factory
             .write()
             .await
             .initialize_with(config)
             .await;
-        self.command_executor
-            .log_message(MessageType::INFO, "updated configuration")
-            .await;
+
+        debug!("updated configuration");
         Ok(())
     }
 }
@@ -96,7 +90,6 @@ where
     C: LSPClient + Send + Sync + 'static,
 {
     async fn initialize(&self, initialize_params: InitializeParams) -> Result<InitializeResult> {
-        info!("Initializing");
         let Some(config) = initialize_params.initialization_options else {
             return Err(Error {
                 code: ErrorCode::InvalidParams,
@@ -126,22 +119,17 @@ where
     async fn initialized(&self, _: InitializedParams) {
         info!("Initialized");
         self.command_executor
-            .show_message(MessageType::INFO, "Sysdig LSP initialized!")
-            .await;
-        self.command_executor
-            .show_message(MessageType::INFO, "Sysdig LSP initialized!")
+            .show_message(MessageType::INFO, "Sysdig LSP initialized")
             .await;
     }
 
     async fn did_change_configuration(&self, params: DidChangeConfigurationParams) {
-        info!("Config changed");
         let _ = self
             .initialize_component_factory_with(&params.settings)
             .await;
     }
 
     async fn did_open(&self, params: DidOpenTextDocumentParams) {
-        info!("File opened");
         self.command_executor
             .update_document_with_text(
                 params.text_document.uri.as_str(),
@@ -151,7 +139,6 @@ where
     }
 
     async fn did_change(&self, params: DidChangeTextDocumentParams) {
-        info!("File changed");
         if let Some(change) = params.content_changes.into_iter().last() {
             self.command_executor
                 .update_document_with_text(params.text_document.uri.as_str(), &change.text)
@@ -160,7 +147,6 @@ where
     }
 
     async fn code_action(&self, params: CodeActionParams) -> Result<Option<CodeActionResponse>> {
-        info!("Code action");
         let Some(content) = self
             .query_executor
             .get_document_text(params.text_document.uri.as_str())
@@ -242,14 +228,26 @@ where
                     .unwrap_or_default();
 
                 let component_factory_lock = self.component_factory.read().await;
-                let image_scanner = component_factory_lock
-                    .image_scanner()
-                    .await
-                    .expect("unable to create image scanner");
+                let image_scanner = component_factory_lock.image_scanner().await.map_err(|e| {
+                    lsp_error(
+                        ErrorCode::InternalError,
+                        format!("unable to create image scanner: {e}"),
+                    )
+                })?;
 
                 self.command_executor
-                    .scan_image_from_file(uri, line, image_scanner.as_ref().unwrap())
+                    .scan_image_from_file(
+                        uri,
+                        line,
+                        image_scanner.as_ref().ok_or_else(|| {
+                            lsp_error(
+                                ErrorCode::InternalError,
+                                "unable to retrieve created image scanner",
+                            )
+                        })?,
+                    )
                     .await?;
+
                 Ok(None)
             }
         }

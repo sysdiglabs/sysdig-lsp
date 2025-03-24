@@ -8,15 +8,15 @@ use crate::infra::{SysdigAPIToken, SysdigImageScanner};
 
 use super::ImageScanner;
 
-#[derive(Clone, Default, Deserialize)]
+#[derive(Clone, Debug, Default, Deserialize)]
 pub struct Config {
     sysdig: SysdigConfig,
 }
 
-#[derive(Clone, Default, Deserialize)]
+#[derive(Clone, Debug, Default, Deserialize)]
 pub struct SysdigConfig {
     api_url: String,
-    api_token: Option<String>,
+    api_token: Option<SysdigAPIToken>,
 }
 
 #[derive(Clone)]
@@ -70,12 +70,12 @@ impl ComponentFactory {
             .sysdig
             .api_token
             .map(Ok)
-            .unwrap_or_else(|| std::env::var("SECURE_API_TOKEN"))?;
+            .unwrap_or_else(|| std::env::var("SECURE_API_TOKEN").map(SysdigAPIToken))?;
 
-        self.scanner.write().await.replace(SysdigImageScanner::new(
-            config.sysdig.api_url,
-            SysdigAPIToken(token),
-        ));
+        self.scanner
+            .write()
+            .await
+            .replace(SysdigImageScanner::new(config.sysdig.api_url, token));
 
         Ok(self.scanner.clone().read_owned().await)
     }

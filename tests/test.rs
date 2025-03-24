@@ -105,20 +105,12 @@ impl Default for TestClient {
 
 #[derive(Default, Clone)]
 pub struct TestClientRecorder {
-    logged_messages: Arc<Mutex<Vec<(MessageType, String)>>>,
     messages_shown: Arc<Mutex<Vec<(MessageType, String)>>>,
     diagnostics_for_each_file: Arc<Mutex<HashMap<String, Vec<Diagnostic>>>>,
 }
 
 #[async_trait::async_trait]
 impl LSPClient for TestClientRecorder {
-    async fn log_message<M: Display + Send>(&self, message_type: MessageType, message: M) {
-        self.logged_messages
-            .lock()
-            .await
-            .push((message_type, message.to_string()));
-    }
-
     async fn show_message<M: Display + Send>(&self, message_type: MessageType, message: M) {
         self.messages_shown
             .lock()

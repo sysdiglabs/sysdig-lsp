@@ -13,7 +13,7 @@ async fn when_the_lsp_is_loaded_initializes_correctly() {
         .recorder()
         .messages_shown()
         .await
-        .contains(&(MessageType::INFO, "Sysdig LSP initialized!".to_string())))
+        .contains(&(MessageType::INFO, "Sysdig LSP initialized".to_string())))
 }
 
 #[tokio::test]

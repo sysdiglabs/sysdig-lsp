@@ -40,10 +40,6 @@ where
         let _ = self.publish_all_diagnostics().await;
     }
 
-    pub async fn log_message(&self, message_type: MessageType, message: &str) {
-        self.client.log_message(message_type, message).await;
-    }
-
     pub async fn show_message(&self, message_type: MessageType, message: &str) {
         self.client.show_message(message_type, message).await;
     }
