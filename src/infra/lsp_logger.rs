@@ -1,4 +1,4 @@
-use tower_lsp::{lsp_types::MessageType, Client};
+use tower_lsp::{Client, lsp_types::MessageType};
 use tracing::{Level, Subscriber};
 use tracing_subscriber::Layer;
 

@@ -1,8 +1,8 @@
 use std::fmt::Display;
 
 use tower_lsp::{
-    lsp_types::{Diagnostic, MessageType, Url},
     Client as TowerClient,
+    lsp_types::{Diagnostic, MessageType, Url},
 };
 use tracing::{error, info};
 

@@ -124,13 +124,9 @@ where
 
             if scan_result.has_vulnerabilities() {
                 let v = &scan_result.vulnerabilities;
-                diagnostic.message = format!("Vulnerabilities found for {}: {} Critical, {} High, {} Medium, {} Low, {} Negligible",
-                    image_for_selected_line,
-                    v.critical,
-                    v.high,
-                    v.medium,
-                    v.low,
-                    v.negligible
+                diagnostic.message = format!(
+                    "Vulnerabilities found for {}: {} Critical, {} High, {} Medium, {} Low, {} Negligible",
+                    image_for_selected_line, v.critical, v.high, v.medium, v.low, v.negligible
                 );
 
                 diagnostic.severity = Some(if scan_result.is_compliant {

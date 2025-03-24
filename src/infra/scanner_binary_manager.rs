@@ -111,7 +111,9 @@ impl ScannerBinaryManager {
             _ => return Err(ScannerBinaryManagerError::UnsupportedArch),
         };
 
-        Ok(format!("https://download.sysdig.com/scanning/bin/sysdig-cli-scanner/{version}/{os}/{arch}/sysdig-cli-scanner"))
+        Ok(format!(
+            "https://download.sysdig.com/scanning/bin/sysdig-cli-scanner/{version}/{os}/{arch}/sysdig-cli-scanner"
+        ))
     }
 
     async fn get_current_installed_version_from(
@@ -156,11 +158,12 @@ impl ScannerBinaryManager {
     async fn is_executable(&self, binary_path: &Path) -> bool {
         #[cfg(unix)]
         {
-            if let Ok(metadata) = tokio::fs::metadata(binary_path).await {
-                let permissions = metadata.permissions();
-                permissions.mode() & 0o111 != 0
-            } else {
-                false
+            match tokio::fs::metadata(binary_path).await {
+                Ok(metadata) => {
+                    let permissions = metadata.permissions();
+                    permissions.mode() & 0o111 != 0
+                }
+                _ => false,
             }
         }
 
@@ -200,16 +203,20 @@ mod tests {
     async fn it_retrieves_the_binary_path() {
         let mgr = ScannerBinaryManager::default();
 
-        assert!(mgr
-            .binary_path_for_version(&Version::new(1, 20, 0))
-            .ends_with(".cache/sysdig-cli-scanner/sysdig-cli-scanner.1.20.0"));
+        assert!(
+            mgr.binary_path_for_version(&Version::new(1, 20, 0))
+                .ends_with(".cache/sysdig-cli-scanner/sysdig-cli-scanner.1.20.0")
+        );
     }
 
     #[tokio::test]
     async fn it_will_download_from_the_correct_url() {
         let mgr = ScannerBinaryManager::default();
 
-        assert_eq!(mgr.download_url(&Version::new(1, 20, 0)).unwrap(), "https://download.sysdig.com/scanning/bin/sysdig-cli-scanner/1.20.0/linux/amd64/sysdig-cli-scanner");
+        assert_eq!(
+            mgr.download_url(&Version::new(1, 20, 0)).unwrap(),
+            "https://download.sysdig.com/scanning/bin/sysdig-cli-scanner/1.20.0/linux/amd64/sysdig-cli-scanner"
+        );
     }
 
     #[tokio::test]

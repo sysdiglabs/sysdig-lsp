@@ -6,12 +6,12 @@ use std::sync::Arc;
 use serde_json::json;
 use sysdig_lsp::app::{LSPClient, LSPServer};
 use tokio::sync::Mutex;
+use tower_lsp::LanguageServer;
 use tower_lsp::lsp_types::{
     CodeActionOrCommand, CodeActionParams, Diagnostic, DidOpenTextDocumentParams, InitializeParams,
     InitializeResult, InitializedParams, MessageType, Position, Range, TextDocumentIdentifier,
     TextDocumentItem, Url,
 };
-use tower_lsp::LanguageServer;
 
 pub struct TestClient {
     server: LSPServer<TestClientRecorder>,

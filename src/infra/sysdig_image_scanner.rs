@@ -50,9 +50,7 @@ pub(in crate::infra) enum SysdigImageScannerError {
     #[error("error deserializing the report: {0}")]
     ReportDeserialization(#[from] serde_json::Error),
 
-    #[error(
-        "invalid parameters provided to the image scanner, check the URL and API Token: {0:?}"
-    )]
+    #[error("invalid parameters provided to the image scanner, check the URL and API Token: {0:?}")]
     InvalidParametersProvided(String),
 
     #[error("internal scanner execution error, this is commonly a bug in the CLI scanner: {0:?}")]
@@ -108,12 +106,12 @@ impl SysdigImageScanner {
             2 => {
                 return Err(SysdigImageScannerError::InvalidParametersProvided(
                     String::from_utf8_lossy(&output.stderr).to_string(),
-                ))
+                ));
             }
             3 => {
                 return Err(SysdigImageScannerError::InternalScannerExecutionError(
                     String::from_utf8_lossy(&output.stderr).to_string(),
-                ))
+                ));
             }
             _ => {}
         };

@@ -1,7 +1,8 @@
 use std::borrow::Cow;
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use tokio::sync::RwLock;
+use tower_lsp::LanguageServer;
 use tower_lsp::jsonrpc::{Error, ErrorCode, Result};
 use tower_lsp::lsp_types::{
     CodeActionOrCommand, CodeActionParams, CodeActionProviderCapability, CodeActionResponse,
@@ -10,7 +11,6 @@ use tower_lsp::lsp_types::{
     InitializedParams, MessageType, ServerCapabilities, TextDocumentSyncCapability,
     TextDocumentSyncKind,
 };
-use tower_lsp::LanguageServer;
 use tracing::{debug, info};
 
 use super::commands::CommandExecutor;
@@ -208,10 +208,10 @@ where
                     return Err(lsp_error(
                         ErrorCode::InternalError,
                         format!(
-                        "error executing command '{}', invalid number of arguments: {}, expected 2",
-                        command,
-                        params.arguments.len()
-                    ),
+                            "error executing command '{}', invalid number of arguments: {}, expected 2",
+                            command,
+                            params.arguments.len()
+                        ),
                     ));
                 }
 

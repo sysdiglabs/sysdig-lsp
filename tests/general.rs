@@ -9,11 +9,13 @@ async fn when_the_lsp_is_loaded_initializes_correctly() {
     let response = client.initialize_lsp().await;
 
     assert!(response.capabilities.code_action_provider.is_some());
-    assert!(client
-        .recorder()
-        .messages_shown()
-        .await
-        .contains(&(MessageType::INFO, "Sysdig LSP initialized".to_string())))
+    assert!(
+        client
+            .recorder()
+            .messages_shown()
+            .await
+            .contains(&(MessageType::INFO, "Sysdig LSP initialized".to_string()))
+    )
 }
 
 #[tokio::test]
@@ -40,8 +42,8 @@ async fn when_the_client_asks_for_the_existing_code_actions_it_receives_the_avai
 }
 
 #[tokio::test]
-async fn when_the_client_asks_for_the_existing_code_actions_but_the_dockerfile_contains_multiple_froms_it_only_returns_the_latest(
-) {
+async fn when_the_client_asks_for_the_existing_code_actions_but_the_dockerfile_contains_multiple_froms_it_only_returns_the_latest()
+ {
     let mut client = test::TestClient::new_initialized().await;
 
     client
