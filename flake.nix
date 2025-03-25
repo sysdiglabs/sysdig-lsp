@@ -32,6 +32,7 @@
             sysdig-lsp-linux-arm64 = pkgsCross.aarch64-multiplatform.pkgsStatic.sysdig-lsp;
             sysdig-lsp-darwin-amd64 = pkgsCross.x86_64-darwin.sysdig-lsp;
             sysdig-lsp-darwin-arm64 = pkgsCross.aarch64-darwin.sysdig-lsp;
+            sysdig-lsp-windows-amd64 = pkgsCross.mingwW64.sysdig-lsp;
           };
 
           devShells.default =

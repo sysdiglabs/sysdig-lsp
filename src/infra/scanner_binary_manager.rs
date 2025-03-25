@@ -1,12 +1,10 @@
 #![allow(dead_code)] // FIXME: to be removed later, when this is used
 
-use std::{
-    os::unix::fs::PermissionsExt,
-    path::{Path, PathBuf},
-};
-
 use regex::Regex;
 use semver::Version;
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
+use std::path::{Path, PathBuf};
 use thiserror::Error;
 use tokio::process::Command;
 
@@ -169,7 +167,7 @@ impl ScannerBinaryManager {
 
         #[cfg(windows)]
         {
-            if let Some(ext) = self.binary_path().extension() {
+            if let Some(ext) = binary_path.extension() {
                 matches!(ext.to_str(), Some("exe") | Some("bat") | Some("cmd"))
             } else {
                 false
