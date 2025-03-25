@@ -11,7 +11,7 @@
     }:
     let
       overlays.default = final: prev: {
-        sysdig-lsp = prev.pkgsStatic.callPackage ./package.nix { };
+        sysdig-lsp = prev.callPackage ./package.nix { };
       };
 
       flake = flake-utils.lib.eachDefaultSystem (
@@ -28,8 +28,8 @@
             inherit sysdig-lsp;
             default = sysdig-lsp;
 
-            sysdig-lsp-linux-amd64 = pkgsCross.gnu64.sysdig-lsp;
-            sysdig-lsp-linux-arm64 = pkgsCross.aarch64-multiplatform.sysdig-lsp;
+            sysdig-lsp-linux-amd64 = pkgsStatic.pkgsCross.gnu64.sysdig-lsp;
+            sysdig-lsp-linux-arm64 = pkgsStatic.pkgsCross.aarch64-multiplatform.sysdig-lsp;
             sysdig-lsp-darwin-amd64 = pkgsCross.x86_64-darwin.sysdig-lsp;
             sysdig-lsp-darwin-arm64 = pkgsCross.aarch64-darwin.sysdig-lsp;
           };

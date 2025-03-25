@@ -1,8 +1,10 @@
 {
   rustPlatform,
+  pkgsStatic,
+  lib,
+  stdenv,
   pkg-config,
   openssl,
-  ...
 }:
 let
   cargoFile = builtins.fromTOML (builtins.readFile ./Cargo.toml);
@@ -21,7 +23,7 @@ rustPlatform.buildRustPackage {
 
   buildInputs = [
     openssl.dev
-  ];
+  ] ++ lib.optionals stdenv.hostPlatform.isDarwin (with pkgsStatic; [ libiconv ]);
 
   doCheck = false;
   meta.mainProgram = "sysdig-lsp";
