@@ -1,0 +1,137 @@
+name: Release new version
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - Cargo.toml
+jobs:
+  get-newer-version:
+    runs-on: ubuntu-latest
+    outputs:
+      new-version: ${{ steps.check.outputs.new_version }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-tags: true
+
+      - name: Extract version from Cargo.toml
+        id: extract
+        run: |
+          VERSION=$(grep -m1 '^version\s*=' Cargo.toml | sed -E 's/version\s*=\s*"([^"]+)".*/\1/')
+          echo "Extracted version: $VERSION"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Get latest tag
+        id: latest
+        run: |
+          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "none")
+          echo "Latest tag: $LATEST_TAG"
+          echo "latest_tag=$LATEST_TAG" >> $GITHUB_OUTPUT
+
+      - name: Check if version is new
+        id: check
+        run: |
+          VERSION="${{ steps.extract.outputs.version }}"
+          LATEST="${{ steps.latest.outputs.latest_tag }}"
+          if [ "$VERSION" = "$LATEST" ]; then
+            echo "No new version detected."
+            echo "new_version=" >> $GITHUB_OUTPUT
+          else
+            echo "New version detected: $VERSION"
+            echo "new_version=$VERSION" >> $GITHUB_OUTPUT
+          fi
+
+  build:
+    name: Build ${{ matrix.os }}-${{ matrix.arch }}
+    needs: get-newer-version
+    if: needs.get-newer-version.outputs.new-version != ''
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            os: linux
+            arch: arm64
+          - runner: ubuntu-latest
+            os: linux
+            arch: amd64
+          - runner: macos-latest
+            os: darwin
+            arch: arm64
+          - runner: macos-latest
+            os: darwin
+            arch: amd64
+          # - runner: ubuntu-latest # Not supported by the CLI Scanner yet
+          #   os: windows
+          #   arch: amd64
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@main
+
+      - name: Configure Nix cache
+        uses: DeterminateSystems/flakehub-cache-action@main
+
+      - name: Build LSP for ${{ matrix.os }}-${{ matrix.arch }}
+        run: nix build -L .#sysdig-lsp-${{ matrix.os }}-${{ matrix.arch }}
+
+      - name: Copy binary built
+        run: cp -a ./result/bin/sysdig-lsp /tmp/sysdig-lsp-${{ matrix.os }}-${{ matrix.arch }}
+
+      - name: Upload binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: sysdig-lsp-${{ matrix.os }}-${{ matrix.arch }}
+          path: /tmp/sysdig-lsp-${{ matrix.os }}-${{ matrix.arch }}
+          if-no-files-found: error
+          retention-days: 1
+
+  release:
+    name: Create release at Github
+    needs: [ build, get-newer-version ]
+    if: needs.get-newer-version.outputs.new-version != ''
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # Required for release creation
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@main
+
+      - name: Configure Nix cache
+        uses: DeterminateSystems/flakehub-cache-action@main
+
+      - name: Install git-chglog
+        run: nix profile install nixpkgs#git-chglog
+
+      - name: Tag with version ${{ needs.get-newer-version.outputs.new-version }}
+        run: git tag ${{ needs.get-newer-version.outputs.new-version }}
+
+      - name: Generate changelog
+        run: git-chglog -c .github/git-chglog/config.yml -o RELEASE_CHANGELOG.md $(git describe --tags $(git rev-list --tags --max-count=1))
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: sysdig-lsp-*
+          path: /tmp/
+          merge-multiple: true
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Sysdig LSP ${{ needs.get-newer-version.outputs.new-version }}
+          tag_name: ${{ needs.get-newer-version.outputs.new-version }}
+          prerelease: false
+          body_path: RELEASE_CHANGELOG.md
+          files: |
+            /tmp/sysdig-lsp-*
