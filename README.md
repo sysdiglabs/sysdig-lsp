@@ -6,6 +6,18 @@ For Visual Studio Code users, we highly recommend the [Sysdig VSCode Extension](
 
 Repository: [https://github.com/sysdiglabs/sysdig-lsp](https://github.com/sysdiglabs/sysdig-lsp)
 
+## Features
+
+| Feature                         | **[VSCode Extension](https://github.com/sysdiglabs/vscode-extension)** | **Sysdig LSP**                                           |
+|---------------------------------|------------------------------------------------------------------------|----------------------------------------------------------|
+| Scan base image in Dockerfile   | Supported                                                              | [Supported](./docs/features/scan_base_image.md) (0.1.0+) |
+| Build and Scan Dockerfile       | Supported                                                              | In roadmap                                               |
+| Layered image analysis          | Supported                                                              | In roadmap                                               |
+| Docker-compose image analysis   | Supported                                                              | In roadmap                                               |
+| K8s Manifest image analysis     | Supported                                                              | In roadmap                                               |
+| Infrastructure-as-code analysis | Supported                                                              | In roadmap                                               |
+| Vulnerability explanation       | Supported                                                              | In roadmap                                               |
+
 ## Build
 
 Sysdig LSP is developed in Rust and can be built using Cargo or Nix (a flake is provided). Follow these steps for your preferred method:
@@ -41,6 +53,28 @@ Sysdig LSP is developed in Rust and can be built using Cargo or Nix (a flake is 
    ```bash
    nix build .#sysdig-lsp
    ```
+
+#### Cross-compiling with Nix
+
+Cross-compilation is made easy with Nix, we have prepared some targets that you can execute to build the binaries as static files.
+Not all cross-compilations are supported though:
+
+|                    | **Target Linux** | **Target MacOS** | **Target Windows** |
+|--------------------|------------------|------------------|--------------------|
+| **Host Linux**     |        ✅        |        ❌        |         ✅         |
+| **Host MacOS**     |        ✅        |        ✅        |         ✅         |
+| **Host Windows**   |        ❌        |        ❌        |         ❌         |
+
+The following binaries are built:
+
+- Linux x86_64: `nix build .#sysdig-lsp-linux-amd64`
+- Linux aarch64: `nix build .#sysdig-lsp-linux-arm64`
+- Darwin x86_64: `nix build .#sysdig-lsp-darwin-amd64`
+- Darwin aarch64: `nix build .#sysdig-lsp-darwin-arm64`
+
+Windows is not yet supported because the Sysdig CLI Scanner is not releasing a .exe for now, but you can still build it with `nix build .#sysdig-lsp-windows-amd64`
+
+The result of the compilation will be saved in `./result/bin`.
 
 ## Configuration Options
 
@@ -95,7 +129,11 @@ Navigate to **Settings > Configure Kate > LSP Client > User Server Settings** an
 
 ### JetBrains IDEs
 
-> **Warning:** The configuration for JetBrains IDEs is not definitive. In the future, we plan to develop a dedicated plugin that will automatically manage the LSP and expand its functionalities. In the meantime, you can use the [LSP4IJ](https://plugins.jetbrains.com/plugin/23257-lsp4ij) plugin for initial day-one support.
+
+> [!WARNING]
+> The configuration for JetBrains IDEs is not definitive.
+> In the future, we plan to develop a dedicated plugin that will automatically manage the LSP and expand its functionalities.
+> In the meantime, you can use the [LSP4IJ](https://plugins.jetbrains.com/plugin/23257-lsp4ij) plugin for initial day-one support.
 
 1. Install the [LSP4IJ](https://plugins.jetbrains.com/plugin/23257-lsp4ij) plugin.
 2. Open the LSP Client config (usually near the Terminal), click **New Language Server** and configure:
