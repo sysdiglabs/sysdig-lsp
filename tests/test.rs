@@ -41,7 +41,7 @@ impl TestClient {
             .initialize(InitializeParams {
                 initialization_options: Some(json!({"sysdig":
                     {
-                        "api_url": "https://us2.app.sysdig.com"
+                        "api_url": "some_api_url"
                     }
                 })),
                 ..Default::default()

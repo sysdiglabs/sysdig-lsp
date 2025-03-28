@@ -51,7 +51,6 @@
                 rust-analyzer
                 lldb
                 pre-commit
-                sysdig-cli-scanner
               ];
 
               inputsFrom = [ sysdig-lsp ];
