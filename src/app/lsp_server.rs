@@ -6,10 +6,10 @@ use tower_lsp::LanguageServer;
 use tower_lsp::jsonrpc::{Error, ErrorCode, Result};
 use tower_lsp::lsp_types::{
     CodeActionOrCommand, CodeActionParams, CodeActionProviderCapability, CodeActionResponse,
-    Command, DidChangeConfigurationParams, DidChangeTextDocumentParams, DidOpenTextDocumentParams,
-    ExecuteCommandOptions, ExecuteCommandParams, InitializeParams, InitializeResult,
-    InitializedParams, MessageType, ServerCapabilities, TextDocumentSyncCapability,
-    TextDocumentSyncKind,
+    CodeLens, CodeLensOptions, CodeLensParams, Command, DidChangeConfigurationParams,
+    DidChangeTextDocumentParams, DidOpenTextDocumentParams, ExecuteCommandOptions,
+    ExecuteCommandParams, InitializeParams, InitializeResult, InitializedParams, MessageType,
+    Position, Range, ServerCapabilities, TextDocumentSyncCapability, TextDocumentSyncKind,
 };
 use tracing::{debug, info};
 
@@ -106,6 +106,9 @@ where
                     TextDocumentSyncKind::FULL,
                 )),
                 code_action_provider: Some(CodeActionProviderCapability::Simple(true)),
+                code_lens_provider: Some(CodeLensOptions {
+                    resolve_provider: Some(false),
+                }),
                 execute_command_provider: Some(ExecuteCommandOptions {
                     commands: vec![SupportedCommands::ExecuteScan.to_string()],
                     ..Default::default()
@@ -180,7 +183,7 @@ where
 
         if last_line_starting_with_from_statement == line_selected_as_usize {
             let action = Command {
-                title: "Scan Image".to_string(),
+                title: "Scan base image".to_string(),
                 command: SupportedCommands::ExecuteScan.to_string(),
                 arguments: Some(vec![
                     json!(params.text_document.uri),
@@ -192,6 +195,58 @@ where
         }
 
         return Ok(None);
+    }
+
+    async fn code_lens(&self, params: CodeLensParams) -> Result<Option<Vec<CodeLens>>> {
+        info!("{}", format!("received code lens params: {params:?}"));
+
+        let Some(content) = self
+            .query_executor
+            .get_document_text(params.text_document.uri.as_str())
+            .await
+        else {
+            return Err(lsp_error(
+                ErrorCode::InternalError,
+                format!(
+                    "unable to extract document content for document: {}",
+                    &params.text_document.uri
+                ),
+            ));
+        };
+
+        let Some(last_line_starting_with_from_statement) = content
+            .lines()
+            .enumerate()
+            .filter(|(_, line)| line.trim_start().starts_with("FROM "))
+            .map(|(line_num, _)| line_num)
+            .last()
+        else {
+            return Ok(None);
+        };
+
+        let scan_base_image_lens = CodeLens {
+            range: Range {
+                start: Position {
+                    line: last_line_starting_with_from_statement as u32,
+                    character: 0,
+                },
+                end: Position {
+                    line: last_line_starting_with_from_statement as u32,
+                    character: 0,
+                },
+            },
+            command: Some(Command {
+                title: "Scan base image".to_string(),
+                command: SupportedCommands::ExecuteScan.to_string(),
+                arguments: Some(vec![
+                    json!(params.text_document.uri),
+                    json!(last_line_starting_with_from_statement),
+                ]),
+            }),
+            data: None,
+        };
+
+        Ok(Some(vec![scan_base_image_lens]))
     }
 
     async fn execute_command(&self, params: ExecuteCommandParams) -> Result<Option<Value>> {

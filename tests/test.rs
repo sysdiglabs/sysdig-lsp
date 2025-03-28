@@ -8,9 +8,9 @@ use sysdig_lsp::app::{LSPClient, LSPServer};
 use tokio::sync::Mutex;
 use tower_lsp::LanguageServer;
 use tower_lsp::lsp_types::{
-    CodeActionOrCommand, CodeActionParams, Diagnostic, DidOpenTextDocumentParams, InitializeParams,
-    InitializeResult, InitializedParams, MessageType, Position, Range, TextDocumentIdentifier,
-    TextDocumentItem, Url,
+    CodeActionOrCommand, CodeActionParams, CodeLens, CodeLensParams, Diagnostic,
+    DidOpenTextDocumentParams, InitializeParams, InitializeResult, InitializedParams, MessageType,
+    Position, Range, TextDocumentIdentifier, TextDocumentItem, Url,
 };
 
 pub struct TestClient {
@@ -86,10 +86,23 @@ impl TestClient {
             .await
             .unwrap_or_else(|_| {
                 panic!(
-                    "unable to send code action for filename {} in line number {}",
-                    filename, line_number
+                    "unable to send code action for filename {filename} in line number {line_number}",
                 )
             })
+    }
+
+    pub async fn request_available_code_lens_in_file(
+        &mut self,
+        filename: &str,
+    ) -> Option<Vec<CodeLens>> {
+        self.server
+            .code_lens(CodeLensParams {
+                text_document: TextDocumentIdentifier::new(url_from(filename)),
+                work_done_progress_params: Default::default(),
+                partial_result_params: Default::default(),
+            })
+            .await
+            .unwrap_or_else(|_| panic!("unable to send code lens for filename {filename}"))
     }
 }
 
