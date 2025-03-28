@@ -1,16 +1,24 @@
 # Sysdig LSP
 
-Sysdig LSP is a Language Server Protocol (LSP) implementation that seamlessly integrates vulnerability management into your preferred editor. It scans images defined in Dockerfiles and requires manual configuration.
+**Sysdig LSP** is a Language Server Protocol implementation that integrates vulnerability scanning directly into your editor.
+It enables quick scans of Dockerfiles, Docker Compose files, Kubernetes manifests, and Infrastructure-as-Code (IaC) files,
+helping you detect vulnerabilities and misconfigurations earlier in the development process.
 
-For Visual Studio Code users, we highly recommend the [Sysdig VSCode Extension](https://marketplace.visualstudio.com/items?itemName=sysdig.sysdig-vscode-ext). This extension delivers full LSP functionality along with additional features, ensuring an optimal experience. Although the LSP is designed to eventually replace the extension, the extension currently remains the best option for VSCode.
-
-Repository: [https://github.com/sysdiglabs/sysdig-lsp](https://github.com/sysdiglabs/sysdig-lsp)
+> [!NOTE]
+> For Visual Studio Code users, we highly recommend the [Sysdig VSCode Extension](https://marketplace.visualstudio.com/items?itemName=sysdig.sysdig-vscode-ext).
+>
+> This extension currently provides full LSP functionality and additional features for the best experience.
+>
+> In the future, the extension will internally leverage the Sysdig LSP implementation, ensuring consistent features and a unified experience across all editors.
+>
+> Repository: [https://github.com/sysdiglabs/sysdig-lsp](https://github.com/sysdiglabs/sysdig-lsp)
 
 ## Features
 
 | Feature                         | **[VSCode Extension](https://github.com/sysdiglabs/vscode-extension)** | **Sysdig LSP**                                           |
 |---------------------------------|------------------------------------------------------------------------|----------------------------------------------------------|
 | Scan base image in Dockerfile   | Supported                                                              | [Supported](./docs/features/scan_base_image.md) (0.1.0+) |
+| Code lens support               | Supported                                                              | In roadmap                                               |
 | Build and Scan Dockerfile       | Supported                                                              | In roadmap                                               |
 | Layered image analysis          | Supported                                                              | In roadmap                                               |
 | Docker-compose image analysis   | Supported                                                              | In roadmap                                               |
