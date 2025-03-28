@@ -1,0 +1,61 @@
+name: CI - Pull Request
+
+on:
+  pull_request:
+    branches:
+      - master
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: nix develop --command bash {0}
+    steps:
+      - name: Fetch code
+        uses: actions/checkout@v4
+
+      - name: Install nix
+        uses: DeterminateSystems/nix-installer-action@main
+
+      - name: Run lint
+        run: |
+          just lint
+
+  pre-commit:
+    name: Pre-commit
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: nix develop --command bash {0}
+    steps:
+      - name: Fetch code
+        uses: actions/checkout@v4
+
+      - name: Install nix
+        uses: DeterminateSystems/nix-installer-action@main
+
+      - name: Run pre-commit
+        run: |
+          pre-commit run -a
+
+  build-and-test:
+    name: Build and test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: nix develop --command bash {0}
+    steps:
+      - name: Fetch code
+        uses: actions/checkout@v4
+
+      - name: Install nix
+        uses: DeterminateSystems/nix-installer-action@main
+
+      - name: Run tests
+        run: |
+          just test
+        env:
+          SECURE_API_URL: https://us2.app.sysdig.com
+          SECURE_API_TOKEN: ${{ secrets.SECURE_API_TOKEN }}

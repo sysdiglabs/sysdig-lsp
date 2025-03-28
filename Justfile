@@ -8,5 +8,9 @@ fix:
 fmt:
     cargo fmt
 
+lint:
+    cargo check
+    cargo clippy
+
 watch:
     cargo watch -x "nextest run"

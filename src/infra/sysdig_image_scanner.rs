@@ -175,16 +175,23 @@ impl ImageScanner for SysdigImageScanner {
 #[cfg(test)]
 #[serial_test::file_serial]
 mod tests {
+    use lazy_static::lazy_static;
+
     use crate::app::ImageScanner;
 
     use super::{SysdigAPIToken, SysdigImageScanner};
 
+    lazy_static! {
+        static ref SYSDIG_SECURE_URL: String =
+            std::env::var("SECURE_API_URL").expect("SECURE_API_URL env var not set");
+        static ref SYSDIG_SECURE_TOKEN: SysdigAPIToken =
+            SysdigAPIToken(std::env::var("SECURE_API_TOKEN").expect("SECURE_API_TOKEN not set"));
+    }
+
     #[tokio::test]
     async fn it_retrieves_the_scanner_from_the_specified_version() {
-        let sysdig_url = "https://us2.app.sysdig.com".to_string();
-        let sysdig_secure_token = SysdigAPIToken(std::env::var("SECURE_API_TOKEN").unwrap());
-
-        let scanner = SysdigImageScanner::new(sysdig_url, sysdig_secure_token);
+        let scanner =
+            SysdigImageScanner::new(SYSDIG_SECURE_URL.clone(), SYSDIG_SECURE_TOKEN.clone());
 
         let report = scanner.scan("ubuntu:22.04").await.unwrap();
 
@@ -195,10 +202,8 @@ mod tests {
 
     #[tokio::test]
     async fn it_scans_the_ubuntu_image_correctly() {
-        let sysdig_url = "https://us2.app.sysdig.com".to_string();
-        let sysdig_secure_token = SysdigAPIToken(std::env::var("SECURE_API_TOKEN").unwrap());
-
-        let scanner = SysdigImageScanner::new(sysdig_url, sysdig_secure_token);
+        let scanner =
+            SysdigImageScanner::new(SYSDIG_SECURE_URL.clone(), SYSDIG_SECURE_TOKEN.clone());
 
         let report = scanner.scan_image("ubuntu:22.04").await.unwrap();
 
