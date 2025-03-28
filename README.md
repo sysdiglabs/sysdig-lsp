@@ -18,7 +18,7 @@ helping you detect vulnerabilities and misconfigurations earlier in the developm
 | Feature                         | **[VSCode Extension](https://github.com/sysdiglabs/vscode-extension)** | **Sysdig LSP**                                           |
 |---------------------------------|------------------------------------------------------------------------|----------------------------------------------------------|
 | Scan base image in Dockerfile   | Supported                                                              | [Supported](./docs/features/scan_base_image.md) (0.1.0+) |
-| Code lens support               | Supported                                                              | In roadmap                                               |
+| Code lens support               | Supported                                                              | [Supported](./docs/features/code_lens.md) (0.2.0+)       |
 | Build and Scan Dockerfile       | Supported                                                              | In roadmap                                               |
 | Layered image analysis          | Supported                                                              | In roadmap                                               |
 | Docker-compose image analysis   | Supported                                                              | In roadmap                                               |

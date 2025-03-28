@@ -35,8 +35,8 @@ where
     C: LSPClient,
 {
     pub async fn update_document_with_text(&self, uri: &str, text: &str) {
-        self.document_database.remove_document(uri).await;
         self.document_database.write_document_text(uri, text).await;
+        self.document_database.remove_diagnostics(uri).await;
         let _ = self.publish_all_diagnostics().await;
     }
 
