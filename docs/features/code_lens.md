@@ -1,6 +1,6 @@
 # Code Lens Support
 
-A CodeLens is a feature that displays additional information about the code,
+CodeLens is a feature that displays additional information about the code,
 such as suggestions, references, or action buttons, directly in the editor without modifying the code itself.
 
 For example, in VS Code, you might see something like "Used 3 times" above a function,
