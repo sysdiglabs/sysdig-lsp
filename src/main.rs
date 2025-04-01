@@ -1,9 +1,15 @@
+use clap::Parser;
 use sysdig_lsp::{app::LSPServer, infra::lsp_logger::LSPLogger};
 use tower_lsp::{LspService, Server};
 use tracing_subscriber::layer::SubscriberExt;
 
+#[derive(Parser, Debug)]
+#[command(version, author, about, long_about)]
+struct Args {}
+
 #[tokio::main]
 async fn main() {
+    let _ = Args::parse();
     let stdin = tokio::io::stdin();
     let stdout = tokio::io::stdout();
 

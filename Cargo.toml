@@ -1,12 +1,18 @@
 [package]
 name = "sysdig-lsp"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2024"
-
+authors = [ "Sysdig Inc." ]
+readme = "README.md"
+description = "LSP implementation that integrates vulnerability and IaC scanning directly into your editor"
+repository = "https://github.com/sysdiglabs/sysdig-lsp"
+license = "Apache-2.0"
+publish = false # We don't want to publish it to crates.io yet.
 
 [dependencies]
 async-trait = "0.1.85"
 chrono = { version = "0.4.40", features = ["serde"] }
+clap = { version = "4.5.34", features = ["derive"] }
 dirs = "6.0.0"
 itertools = "0.14.0"
 regex = "1.11.1"
