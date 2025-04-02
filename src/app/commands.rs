@@ -1,9 +1,9 @@
 use tower_lsp::{
-    jsonrpc::{Error, ErrorCode, Result},
+    jsonrpc::{Error, Result},
     lsp_types::{Diagnostic, DiagnosticSeverity, MessageType, Position, Range},
 };
 
-use super::{ImageScanner, InMemoryDocumentDatabase, LSPClient};
+use super::{ImageScanner, InMemoryDocumentDatabase, LSPClient, lsp_server::WithContext};
 
 pub struct CommandExecutor<C> {
     client: C,
@@ -59,36 +59,27 @@ impl<C> CommandExecutor<C>
 where
     C: LSPClient,
 {
-    pub async fn scan_image_from_file<S: ImageScanner>(
+    pub async fn scan_image_from_file(
         &self,
         uri: &str,
         line: u32,
-        image_scanner: &S,
+        image_scanner: &impl ImageScanner,
     ) -> Result<()> {
         let document_text = self
             .document_database
             .read_document_text(uri)
             .await
-            .ok_or_else(|| Error {
-                code: ErrorCode::InternalError,
-                message: "unable to obtain document to scan".into(),
-                data: None,
+            .ok_or_else(|| {
+                Error::internal_error().with_message("unable to obtain document to scan")
             })?;
 
         let image_for_selected_line =
-            self.image_from_line(line, &document_text)
-                .ok_or_else(|| Error {
-                    code: ErrorCode::ParseError,
-                    message: format!("unable to retrieve image for the selected line: {}", line)
-                        .into(),
-                    data: None,
-                })?;
-
-        let range_for_selected_line = document_text
-            .lines()
-            .nth(line as usize)
-            .map(|x| x.len() as u32)
-            .unwrap_or(u32::MAX);
+            self.image_from_line(line, &document_text).ok_or_else(|| {
+                Error::parse_error().with_message(format!(
+                    "unable to retrieve image for the selected line: {}",
+                    line
+                ))
+            })?;
 
         self.show_message(
             MessageType::INFO,
@@ -99,11 +90,7 @@ where
         let scan_result = image_scanner
             .scan_image(image_for_selected_line)
             .await
-            .map_err(|e| Error {
-                code: ErrorCode::InternalError,
-                message: e.to_string().into(),
-                data: None,
-            })?;
+            .map_err(|e| Error::internal_error().with_message(e.to_string()))?;
 
         self.show_message(
             MessageType::INFO,
@@ -112,11 +99,20 @@ where
         .await;
 
         let diagnostic = {
+            let range_for_selected_line = Range::new(
+                Position::new(line, 0),
+                Position::new(
+                    line,
+                    document_text
+                        .lines()
+                        .nth(line as usize)
+                        .map(|x| x.len() as u32)
+                        .unwrap_or(u32::MAX),
+                ),
+            );
+
             let mut diagnostic = Diagnostic {
-                range: Range {
-                    start: Position::new(line, 0),
-                    end: Position::new(line, range_for_selected_line),
-                },
+                range: range_for_selected_line,
                 severity: Some(DiagnosticSeverity::HINT),
                 message: "No vulnerabilities found.".to_owned(),
                 ..Default::default()

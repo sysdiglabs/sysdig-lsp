@@ -42,10 +42,8 @@ where
 {
     async fn initialize_component_factory_with(&self, config: &Value) -> Result<()> {
         let Ok(config) = serde_json::from_value::<Config>(config.clone()) else {
-            return Err(lsp_error(
-                ErrorCode::InternalError,
-                format!("unable to transform json into config: {}", config),
-            ));
+            return Err(Error::internal_error()
+                .with_message(format!("unable to transform json into config: {}", config)));
         };
 
         debug!("updating with configuration: {config:?}");
@@ -155,13 +153,10 @@ where
             .get_document_text(params.text_document.uri.as_str())
             .await
         else {
-            return Err(lsp_error(
-                ErrorCode::InternalError,
-                format!(
-                    "unable to extract document content for document: {}",
-                    &params.text_document.uri
-                ),
-            ));
+            return Err(Error::internal_error().with_message(format!(
+                "unable to extract document content for document: {}",
+                &params.text_document.uri
+            )));
         };
 
         let Some(last_line_starting_with_from_statement) = content
@@ -175,10 +170,10 @@ where
         };
 
         let Ok(line_selected_as_usize) = usize::try_from(params.range.start.line) else {
-            return Err(lsp_error(
-                ErrorCode::InternalError,
-                format!("unable to parse u32 as usize: {}", params.range.start.line),
-            ));
+            return Err(Error::internal_error().with_message(format!(
+                "unable to parse u32 as usize: {}",
+                params.range.start.line
+            )));
         };
 
         if last_line_starting_with_from_statement == line_selected_as_usize {
@@ -205,13 +200,10 @@ where
             .get_document_text(params.text_document.uri.as_str())
             .await
         else {
-            return Err(lsp_error(
-                ErrorCode::InternalError,
-                format!(
-                    "unable to extract document content for document: {}",
-                    &params.text_document.uri
-                ),
-            ));
+            return Err(Error::internal_error().with_message(format!(
+                "unable to extract document content for document: {}",
+                &params.text_document.uri
+            )));
         };
 
         let Some(last_line_starting_with_from_statement) = content
@@ -225,16 +217,10 @@ where
         };
 
         let scan_base_image_lens = CodeLens {
-            range: Range {
-                start: Position {
-                    line: last_line_starting_with_from_statement as u32,
-                    character: 0,
-                },
-                end: Position {
-                    line: last_line_starting_with_from_statement as u32,
-                    character: 0,
-                },
-            },
+            range: Range::new(
+                Position::new(last_line_starting_with_from_statement as u32, 0),
+                Position::new(last_line_starting_with_from_statement as u32, 0),
+            ),
             command: Some(Command {
                 title: "Scan base image".to_string(),
                 command: SupportedCommands::ExecuteScan.to_string(),
@@ -251,61 +237,19 @@ where
 
     async fn execute_command(&self, params: ExecuteCommandParams) -> Result<Option<Value>> {
         let command: SupportedCommands = params.command.as_str().try_into().map_err(|e| {
-            lsp_error(
-                ErrorCode::InternalError,
-                format!("unable to parse command: {}", e),
-            )
+            Error::internal_error().with_message(format!("unable to parse command: {}", e))
         })?;
 
-        match command {
-            SupportedCommands::ExecuteScan => {
-                if params.arguments.len() < 2 {
-                    return Err(lsp_error(
-                        ErrorCode::InternalError,
-                        format!(
-                            "error executing command '{}', invalid number of arguments: {}, expected 2",
-                            command,
-                            params.arguments.len()
-                        ),
-                    ));
-                }
+        let result = match command {
+            SupportedCommands::ExecuteScan => execute_command_scan_base_image(self, &params)
+                .await
+                .map(|_| None),
+        };
 
-                let uri = params
-                    .arguments
-                    .first()
-                    .and_then(|x| x.as_str())
-                    .unwrap_or_default();
-                let line = params
-                    .arguments
-                    .get(1)
-                    .and_then(|x| x.as_u64())
-                    .and_then(|x| u32::try_from(x).ok())
-                    .unwrap_or_default();
-
-                let component_factory_lock = self.component_factory.read().await;
-                let image_scanner = component_factory_lock.image_scanner().await.map_err(|e| {
-                    lsp_error(
-                        ErrorCode::InternalError,
-                        format!("unable to create image scanner: {e}"),
-                    )
-                })?;
-
-                self.command_executor
-                    .scan_image_from_file(
-                        uri,
-                        line,
-                        image_scanner.as_ref().ok_or_else(|| {
-                            lsp_error(
-                                ErrorCode::InternalError,
-                                "unable to retrieve created image scanner",
-                            )
-                        })?,
-                    )
-                    .await?;
-
-                Ok(None)
-            }
-        }
+        result.map_err(|mut e: Error| {
+            e.message = format!("error calling command: '{command}': {e}").into();
+            e
+        })
     }
 
     async fn shutdown(&self) -> Result<()> {
@@ -313,10 +257,55 @@ where
     }
 }
 
-fn lsp_error(code: ErrorCode, message: impl Into<Cow<'static, str>>) -> Error {
-    Error {
-        code,
-        message: message.into(),
-        data: None,
+async fn execute_command_scan_base_image<C: LSPClient>(
+    server: &LSPServer<C>,
+    params: &ExecuteCommandParams,
+) -> Result<()> {
+    if params.arguments.len() < 2 {
+        return Err(Error::internal_error().with_message(format!(
+            "invalid number of arguments: {}, expected 2",
+            params.arguments.len()
+        )));
+    }
+
+    let uri = params
+        .arguments
+        .first()
+        .and_then(|x| x.as_str())
+        .unwrap_or_default();
+    let line = params
+        .arguments
+        .get(1)
+        .and_then(|x| x.as_u64())
+        .and_then(|x| u32::try_from(x).ok())
+        .unwrap_or_default();
+
+    let component_factory_lock = server.component_factory.read().await;
+    let image_scanner = component_factory_lock.image_scanner().await.map_err(|e| {
+        Error::internal_error().with_message(format!("unable to create image scanner: {e}"))
+    })?;
+
+    server
+        .command_executor
+        .scan_image_from_file(
+            uri,
+            line,
+            image_scanner.as_ref().ok_or_else(|| {
+                Error::internal_error().with_message("unable to retrieve created image scanner")
+            })?,
+        )
+        .await?;
+
+    Ok(())
+}
+
+pub(super) trait WithContext {
+    fn with_message(self, message: impl Into<Cow<'static, str>>) -> Self;
+}
+
+impl WithContext for Error {
+    fn with_message(mut self, message: impl Into<Cow<'static, str>>) -> Self {
+        self.message = message.into();
+        self
     }
 }
