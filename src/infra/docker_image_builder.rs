@@ -29,6 +29,7 @@ impl From<DockerImageBuilderError> for ImageBuildError {
     }
 }
 
+#[derive(Clone)]
 pub struct DockerImageBuilder {
     docker_client: Docker,
 }
@@ -117,14 +118,13 @@ impl ImageBuilder for DockerImageBuilder {
 
 #[cfg(test)]
 mod tests {
-
     use std::{path::PathBuf, str::FromStr};
 
     use bollard::Docker;
 
     use crate::{
         app::{ImageBuildError, ImageBuilder},
-        infra::{DockerImageBuilder, docker_image_builder::DockerImageBuilderError},
+        infra::DockerImageBuilder,
     };
 
     #[tokio::test]
@@ -175,7 +175,7 @@ mod tests {
         assert!(image_built.is_err());
         assert_eq!(
             image_built.err().unwrap().to_string(),
-            "image builder error: internal docker client error: Docker responded with status code 500: Cannot locate specified Dockerfile: Nonexistent.dockerfile"
+            "image builder error: internal docker client error: DockerResponseServerError { status_code: 500, message: \"Cannot locate specified Dockerfile: Nonexistent.dockerfile\" }"
         );
     }
 
