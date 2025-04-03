@@ -63,7 +63,6 @@ impl DockerImageBuilder {
         );
 
         while let Some(result) = results.next().await {
-            println!("{:?}", result);
             match result {
                 Ok(BuildInfo { aux, .. }) if aux.is_some() => {
                     let image_id = aux.unwrap().id.unwrap();
@@ -72,9 +71,6 @@ impl DockerImageBuilder {
                         image_name,
                         image_id,
                     });
-                }
-                Ok(BuildInfo { stream, .. }) if stream.is_some() => {
-                    info!("build status: {}", stream.unwrap())
                 }
                 Err(error) => return Err(DockerImageBuilderError::Docker(error)),
                 _ => {}
