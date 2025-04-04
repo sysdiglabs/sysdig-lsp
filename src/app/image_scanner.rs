@@ -33,7 +33,4 @@ pub struct Vulnerabilities {
 pub enum ImageScanError {
     #[error("error in the internal scanner execution: {0}")]
     InternalScannerError(Box<dyn Error>),
-
-    #[error("unknown error")]
-    Unknown(#[from] Box<dyn Error>),
 }

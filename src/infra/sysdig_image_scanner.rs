@@ -90,6 +90,7 @@ impl SysdigImageScanner {
             "--output-schema=v1",
             "--separate-by-layer",
             "--console-log",
+            "--skipupload",
             "--apiurl",
             self.url.as_str(),
         ];

@@ -1,3 +1,3 @@
 FROM nginx:latest
 
-RUN echo "Hello"
+RUN apt update && apt full-upgrade -y

@@ -1,12 +1,10 @@
-use std::{env::VarError, sync::Arc};
+use std::env::VarError;
 
+use bollard::Docker;
 use serde::Deserialize;
 use thiserror::Error;
-use tokio::sync::{OwnedRwLockReadGuard, RwLock};
 
-use crate::infra::{SysdigAPIToken, SysdigImageScanner};
-
-use super::ImageScanner;
+use crate::infra::{DockerImageBuilder, SysdigAPIToken, SysdigImageScanner};
 
 #[derive(Clone, Debug, Default, Deserialize)]
 pub struct Config {
@@ -19,11 +17,12 @@ pub struct SysdigConfig {
     api_token: Option<SysdigAPIToken>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct ComponentFactory {
     config: Option<Config>,
 
-    scanner: Arc<RwLock<Option<SysdigImageScanner>>>,
+    scanner: Option<SysdigImageScanner>,
+    builder: Option<DockerImageBuilder>,
 }
 
 #[derive(Error, Debug)]
@@ -33,51 +32,49 @@ pub enum ComponentFactoryError {
 
     #[error("unable to retrieve sysdig api token from env var: {0}")]
     UnableToRetrieveAPITokenFromEnvVar(#[from] VarError),
+
+    #[error("docker client error: {0:?}")]
+    DockerClientError(#[from] bollard::errors::Error),
 }
 
 impl ComponentFactory {
-    pub fn uninit() -> Self {
-        Self {
-            config: None,
-            scanner: Default::default(),
-        }
-    }
-
-    pub async fn is_initialized(&self) -> bool {
-        self.config.is_some()
-    }
-
-    pub async fn initialize_with(&mut self, config: Config) {
+    pub fn initialize_with(&mut self, config: Config) {
         self.config.replace(config);
-        self.scanner.write().await.take();
+        self.scanner.take();
     }
 
-    pub async fn image_scanner(
-        &self,
-    ) -> Result<OwnedRwLockReadGuard<Option<impl ImageScanner>>, ComponentFactoryError> {
-        {
-            let scanner = self.scanner.clone().read_owned().await;
-            if scanner.is_some() {
-                return Ok(scanner);
-            }
-        };
+    pub fn image_scanner(&mut self) -> Result<SysdigImageScanner, ComponentFactoryError> {
+        if self.scanner.is_some() {
+            return Ok(self.scanner.clone().unwrap());
+        }
 
-        let Some(config) = self.config.clone() else {
+        let Some(config) = &self.config else {
             return Err(ComponentFactoryError::ConfigurationNotProvided);
         };
 
         let token = config
             .sysdig
             .api_token
+            .clone()
             .map(Ok)
             .unwrap_or_else(|| std::env::var("SECURE_API_TOKEN").map(SysdigAPIToken))?;
 
-        self.scanner
-            .write()
-            .await
-            .replace(SysdigImageScanner::new(config.sysdig.api_url, token));
+        let image_scanner = SysdigImageScanner::new(config.sysdig.api_url.clone(), token);
 
-        Ok(self.scanner.clone().read_owned().await)
+        self.scanner.replace(image_scanner);
+        Ok(self.scanner.clone().unwrap())
+    }
+
+    pub fn image_builder(&mut self) -> Result<DockerImageBuilder, ComponentFactoryError> {
+        if self.builder.is_some() {
+            return Ok(self.builder.clone().unwrap());
+        }
+
+        let docker_client = Docker::connect_with_local_defaults()?;
+        let image_builder = DockerImageBuilder::new(docker_client);
+
+        self.builder.replace(image_builder);
+        Ok(self.builder.clone().unwrap())
     }
 }
 
@@ -85,19 +82,33 @@ impl ComponentFactory {
 mod test {
     use super::{ComponentFactory, Config};
 
-    #[tokio::test]
-    async fn it_loads_the_factory_uninit() {
-        let factory = ComponentFactory::uninit();
+    #[test]
+    fn it_loads_the_factory_uninit() {
+        let factory = ComponentFactory::default();
 
-        assert!(!factory.is_initialized().await);
+        assert!(factory.config.is_none());
     }
 
-    #[tokio::test]
-    async fn it_creates_a_scanner_with_the_provided_config() {
-        let mut factory = ComponentFactory::uninit();
+    #[test]
+    fn it_fails_to_create_the_scanner_without_config() {
+        let mut factory = ComponentFactory::default();
 
-        factory.initialize_with(Config::default()).await;
+        assert!(factory.image_scanner().is_err());
+    }
 
-        assert!(factory.is_initialized().await);
+    #[test]
+    fn it_creates_a_scanner_after_initializing() {
+        let mut factory = ComponentFactory::default();
+
+        factory.initialize_with(Config::default());
+
+        assert!(factory.image_scanner().is_ok());
+    }
+
+    #[test]
+    fn it_creates_a_builder_without_config() {
+        let mut factory = ComponentFactory::default();
+
+        assert!(factory.image_builder().is_ok());
     }
 }
