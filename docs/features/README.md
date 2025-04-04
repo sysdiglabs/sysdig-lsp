@@ -10,4 +10,8 @@ Sysdig LSP provides tools to integrate container security checks into your devel
 - Displays actionable commands directly within the editor (e.g., initiating base image scans).
 - Enables quick access to frequently performed actions.
 
+## [Build and Scan](./build_and_scan.md)
+- Builds and scans the entire final Dockerfile image used in production.
+- Supports multi-stage Dockerfiles, analyzing final stage and explicitly copied artifacts from intermediate stages.
+
 See the linked documents for more details.
