@@ -16,7 +16,7 @@ async fn main() {
     let (service, messages) = LspService::new(|client| {
         let subscriber = tracing_subscriber::registry()
             .with(LSPLogger::new(client.clone()))
-            .with(tracing_subscriber::fmt::layer());
+            .with(tracing_subscriber::fmt::layer().with_writer(std::io::stderr));
 
         tracing::subscriber::set_global_default(subscriber)
             .expect("setting default subscriber failed");
