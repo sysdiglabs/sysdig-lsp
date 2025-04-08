@@ -137,7 +137,6 @@ Navigate to **Settings > Configure Kate > LSP Client > User Server Settings** an
 
 ### JetBrains IDEs
 
-
 > [!WARNING]
 > The configuration for JetBrains IDEs is not definitive.
 > In the future, we plan to develop a dedicated plugin that will automatically manage the LSP and expand its functionalities.
@@ -157,7 +156,7 @@ Navigate to **Settings > Configure Kate > LSP Client > User Server Settings** an
      }
      ```
 
-### Vim with coc.nvim
+### Vim with coc.nvim (to be reviewed)
 
 Add the following to your `coc.nvim` configuration:
 
@@ -177,22 +176,55 @@ Add the following to your `coc.nvim` configuration:
 
 ### Neovim with nvim-lspconfig
 
-Refer to the [Neovim LSP configuration guide](https://neovim.io/doc/user/lsp.html#lsp-config) and add:
+Install [nvim-lspconfig](https://github.com/neovim/nvim-lspconfig?tab=readme-ov-file#install):
+
+```bash
+git clone https://github.com/neovim/nvim-lspconfig ~/.config/nvim/pack/plugins/start/nvim-lspconfig
+```
+
+Now you can use `require("lspconfig")`, so add in your `~/.config/nvim/init.lua`:
 
 ```lua
-return {
-  default_config = {
-    cmd = { 'sysdig-lsp' },
-    root_dir = util.root_pattern('.git'),
-    filetypes = {
-      'dockerfile',
+local lspconfig = require("lspconfig")
+local configs = require("lspconfig.configs")
+
+if not configs.sysdig then
+  configs.sysdig = {
+    default_config = {
+      cmd = { "sysdig-lsp" },
+      root_dir = lspconfig.util.root_pattern(".git"),
+      filetypes = { "dockerfile" },
+      single_file_support = true,
+      init_options = {
+        sysdig = {
+          api_url = "https://us2.app.sysdig.com",
+          -- api_token = "my_token", -- if not specified, will be retrieved from the SYSDIG_API_TOKEN env var.
+        },
+      },
     },
-    single_file_support = true,
-    init_options = {
-      activateSnykCode = 'true',
+  }
+end
+
+lspconfig.sysdig.setup({})
+```
+
+### Neovim 0.11+ (without plugins)
+
+Refer to the [Neovim LSP configuration guide](https://neovim.io/doc/user/lsp.html#lsp-config) and add the following config in `~/.config/nvim/init.lua`:
+
+```lua
+vim.lsp.config.sysdig = {
+  cmd = {"sysdig-lsp"},
+  root_markers = {"Dockerfile"},
+  filetypes = { "dockerfile" },
+  init_options = {
+    sysdig = {
+      api_url = "https://us2.app.sysdig.com",
+      -- api_token = "my_token", -- if not specified, will be retrieved from the SYSDIG_API_TOKEN env var.
     },
   },
 }
+vim.lsp.enable("sysdig")
 ```
 
 ## Hacking
