@@ -4,6 +4,101 @@ use chrono::{DateTime, NaiveDate, Utc};
 use serde::Deserialize;
 use std::collections::HashMap;
 
+use crate::app::{self, ImageScanResult, LayerScanResult, VulnerabilityEntry};
+
+impl From<SysdigImageScannerReport> for ImageScanResult {
+    fn from(report: SysdigImageScannerReport) -> Self {
+        // a) Todas las vulnerabilidades de la imagen
+        let vulnerabilities = report
+            .result
+            .as_ref()
+            .and_then(|r| r.vulnerabilities.as_ref())
+            .map(|map| {
+                map.iter()
+                    .map(|(id, v)| VulnerabilityEntry {
+                        id: id.clone(),
+                        severity: severity_for(&v.severity),
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+
+        // b) Cumplimiento de políticas
+        let is_compliant = report
+            .result
+            .as_ref()
+            .and_then(|r| r.policies.as_ref())
+            .and_then(|p| p.global_evaluation.as_ref())
+            .map(|e| e == &PoliciesGlobalEvaluation::Accepted)
+            .unwrap_or(false);
+
+        // c) Por capas
+        let layers = layers_for_result(report.result.as_ref().unwrap());
+
+        ImageScanResult {
+            vulnerabilities,
+            is_compliant,
+            layers: layers.unwrap_or_default(),
+        }
+    }
+}
+
+fn layers_for_result(scan: &ScanResultResponse) -> Option<Vec<LayerScanResult>> {
+    // Agrupa cada vuln por digest de capa
+    let mut layer_map: HashMap<&String, Vec<VulnerabilityEntry>> = HashMap::new();
+    for (vuln_id, vuln) in scan.vulnerabilities.as_ref()? {
+        if let (Some(_pkg), Some(layer_ref)) = (
+            vuln.package_ref.as_ref().and_then(|r| scan.packages.get(r)),
+            scan.packages
+                .get(vuln.package_ref.as_ref()?)?
+                .layer_ref
+                .as_ref(),
+        ) {
+            layer_map
+                .entry(layer_ref)
+                .or_default()
+                .push(VulnerabilityEntry {
+                    id: vuln_id.clone(),
+                    severity: severity_for(&vuln.severity),
+                });
+        }
+    }
+
+    Some(
+        scan.layers
+            .as_ref()?
+            .iter()
+            .map(|(_, layer)| {
+                let entries = layer_map.get(&layer.digest).cloned().unwrap_or_default();
+                LayerScanResult {
+                    layer_instruction: layer
+                        .command
+                        .as_deref()
+                        .unwrap_or_default()
+                        .strip_prefix("/bin/sh -c #(nop) ")
+                        .unwrap_or_default()
+                        .split_whitespace()
+                        .next()
+                        .unwrap_or_default()
+                        .to_uppercase(),
+                    layer_text: layer.command.clone().unwrap_or_default(),
+                    vulnerabilities: entries,
+                }
+            })
+            .collect(),
+    )
+}
+
+fn severity_for(sev: &VulnSeverity) -> app::VulnSeverity {
+    match sev {
+        VulnSeverity::Critical => app::VulnSeverity::Critical,
+        VulnSeverity::High => app::VulnSeverity::High,
+        VulnSeverity::Medium => app::VulnSeverity::Medium,
+        VulnSeverity::Low => app::VulnSeverity::Low,
+        VulnSeverity::Negligible => app::VulnSeverity::Negligible,
+    }
+}
+
 #[derive(Debug, Deserialize)]
 pub(super) struct SysdigImageScannerReport {
     pub info: Option<Info>,

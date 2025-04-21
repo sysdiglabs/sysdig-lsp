@@ -2,19 +2,15 @@
 
 use std::{fmt::Display, sync::Arc};
 
-use itertools::Itertools;
 use serde::Deserialize;
 use thiserror::Error;
 use tokio::{process::Command, sync::Mutex};
 
-use crate::{
-    app::{ImageScanError, ImageScanResult, ImageScanner, Vulnerabilities},
-    infra::sysdig_image_scanner_result::PoliciesGlobalEvaluation,
-};
+use crate::app::{ImageScanError, ImageScanResult, ImageScanner};
 
 use super::{
     scanner_binary_manager::{ScannerBinaryManager, ScannerBinaryManagerError},
-    sysdig_image_scanner_result::{SysdigImageScannerReport, VulnSeverity},
+    sysdig_image_scanner_result::SysdigImageScannerReport,
 };
 
 #[derive(Clone)]
@@ -126,50 +122,7 @@ impl SysdigImageScanner {
 #[async_trait::async_trait]
 impl ImageScanner for SysdigImageScanner {
     async fn scan_image(&self, image_pull_string: &str) -> Result<ImageScanResult, ImageScanError> {
-        let report = self.scan(image_pull_string).await?;
-
-        let vuln_count_by_severity = report
-            .result
-            .as_ref()
-            .and_then(|e| e.vulnerabilities.as_ref())
-            .map(|vulns| vulns.values())
-            .into_iter()
-            .flatten()
-            .counts_by(|e| &e.severity);
-
-        let is_compliant = report
-            .result
-            .as_ref()
-            .and_then(|result| result.policies.as_ref())
-            .and_then(|policies| policies.global_evaluation.as_ref())
-            .map(|global_evaluation| global_evaluation == &PoliciesGlobalEvaluation::Accepted)
-            .unwrap_or(false);
-
-        Ok(ImageScanResult {
-            vulnerabilities: Vulnerabilities {
-                critical: vuln_count_by_severity
-                    .get(&VulnSeverity::Critical)
-                    .cloned()
-                    .unwrap_or_default(),
-                high: vuln_count_by_severity
-                    .get(&VulnSeverity::High)
-                    .cloned()
-                    .unwrap_or_default(),
-                medium: vuln_count_by_severity
-                    .get(&VulnSeverity::Medium)
-                    .cloned()
-                    .unwrap_or_default(),
-                low: vuln_count_by_severity
-                    .get(&VulnSeverity::Low)
-                    .cloned()
-                    .unwrap_or_default(),
-                negligible: vuln_count_by_severity
-                    .get(&VulnSeverity::Negligible)
-                    .cloned()
-                    .unwrap_or_default(),
-            },
-            is_compliant,
-        })
+        Ok(self.scan(image_pull_string).await?.into())
     }
 }
 
@@ -178,7 +131,7 @@ impl ImageScanner for SysdigImageScanner {
 mod tests {
     use lazy_static::lazy_static;
 
-    use crate::app::ImageScanner;
+    use crate::app::{ImageScanner, VulnSeverity};
 
     use super::{SysdigAPIToken, SysdigImageScanner};
 
@@ -206,13 +159,18 @@ mod tests {
         let scanner =
             SysdigImageScanner::new(SYSDIG_SECURE_URL.clone(), SYSDIG_SECURE_TOKEN.clone());
 
-        let report = scanner.scan_image("ubuntu:22.04").await.unwrap();
+        let report = scanner
+            .scan_image(
+                "ubuntu@sha256:a76d0e9d99f0e91640e35824a6259c93156f0f07b7778ba05808c750e7fa6e68",
+            )
+            .await
+            .unwrap();
 
-        assert!(report.vulnerabilities.critical == 0);
-        assert!(report.vulnerabilities.high == 0);
-        assert!(report.vulnerabilities.medium >= 15);
-        assert!(report.vulnerabilities.low >= 32);
-        assert!(report.vulnerabilities.negligible >= 7);
+        assert!(report.count_vulns_of_severity(VulnSeverity::Critical) == 0);
+        assert!(report.count_vulns_of_severity(VulnSeverity::High) == 0);
+        assert!(report.count_vulns_of_severity(VulnSeverity::Medium) >= 9);
+        assert!(report.count_vulns_of_severity(VulnSeverity::Low) >= 28);
+        assert!(report.count_vulns_of_severity(VulnSeverity::Negligible) >= 3);
         assert!(!report.is_compliant);
     }
 }
