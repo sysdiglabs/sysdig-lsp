@@ -14,4 +14,8 @@ Sysdig LSP provides tools to integrate container security checks into your devel
 - Builds and scans the entire final Dockerfile image used in production.
 - Supports multi-stage Dockerfiles, analyzing final stage and explicitly copied artifacts from intermediate stages.
 
+## [Layered Analysis](./layered_analysis.md)
+- Scans each Dockerfile layer individually for precise vulnerability identification.
+- Supports detailed analysis in single-stage and multi-stage Dockerfiles.
+
 See the linked documents for more details.
