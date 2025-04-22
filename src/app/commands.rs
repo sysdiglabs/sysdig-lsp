@@ -8,8 +8,11 @@ use tower_lsp::{
     lsp_types::{Diagnostic, DiagnosticSeverity, MessageType, Position, Range},
 };
 
+use crate::infra::parse_dockerfile;
+
 use super::{
-    ImageBuilder, ImageScanner, InMemoryDocumentDatabase, LSPClient, lsp_server::WithContext,
+    ImageBuilder, ImageScanResult, ImageScanner, InMemoryDocumentDatabase, LSPClient,
+    LayerScanResult, VulnSeverity, lsp_server::WithContext,
 };
 
 pub struct CommandExecutor<C> {
@@ -126,10 +129,14 @@ where
             };
 
             if scan_result.has_vulnerabilities() {
-                let v = &scan_result.vulnerabilities;
                 diagnostic.message = format!(
                     "Vulnerabilities found for {}: {} Critical, {} High, {} Medium, {} Low, {} Negligible",
-                    image_for_selected_line, v.critical, v.high, v.medium, v.low, v.negligible
+                    image_for_selected_line,
+                    scan_result.count_vulns_of_severity(VulnSeverity::Critical),
+                    scan_result.count_vulns_of_severity(VulnSeverity::High),
+                    scan_result.count_vulns_of_severity(VulnSeverity::Medium),
+                    scan_result.count_vulns_of_severity(VulnSeverity::Low),
+                    scan_result.count_vulns_of_severity(VulnSeverity::Negligible),
                 );
 
                 diagnostic.severity = Some(if scan_result.is_compliant {
@@ -203,42 +210,8 @@ where
         )
         .await;
 
-        let diagnostic = {
-            let range_for_selected_line = Range::new(
-                Position::new(line, 0),
-                Position::new(
-                    line,
-                    document_text
-                        .lines()
-                        .nth(line as usize)
-                        .map(|x| x.len() as u32)
-                        .unwrap_or(u32::MAX),
-                ),
-            );
-
-            let mut diagnostic = Diagnostic {
-                range: range_for_selected_line,
-                severity: Some(DiagnosticSeverity::HINT),
-                message: "No vulnerabilities found.".to_owned(),
-                ..Default::default()
-            };
-
-            if scan_result.has_vulnerabilities() {
-                let v = &scan_result.vulnerabilities;
-                diagnostic.message = format!(
-                    "Vulnerabilities found for Dockerfile in {}: {} Critical, {} High, {} Medium, {} Low, {} Negligible",
-                    uri_without_file_path, v.critical, v.high, v.medium, v.low, v.negligible
-                );
-
-                diagnostic.severity = Some(if scan_result.is_compliant {
-                    DiagnosticSeverity::INFORMATION
-                } else {
-                    DiagnosticSeverity::ERROR
-                });
-            }
-
-            diagnostic
-        };
+        let diagnostic = diagnostic_for_image(line, &document_text, &scan_result);
+        let diagnostics_per_layer = diagnostics_for_layers(&document_text, &scan_result)?;
 
         self.document_database
             .remove_diagnostics(uri.to_str().unwrap())
@@ -246,6 +219,131 @@ where
         self.document_database
             .append_document_diagnostics(uri.to_str().unwrap(), &[diagnostic])
             .await;
+        self.document_database
+            .append_document_diagnostics(uri.to_str().unwrap(), &diagnostics_per_layer)
+            .await;
         self.publish_all_diagnostics().await
     }
+}
+
+pub fn diagnostics_for_layers(
+    document_text: &str,
+    scan_result: &ImageScanResult,
+) -> Result<Vec<Diagnostic>> {
+    let instructions = parse_dockerfile(document_text);
+    let layers = &scan_result.layers;
+
+    let mut instr_idx = instructions.len().checked_sub(1);
+    let mut layer_idx = layers.len().checked_sub(1);
+
+    let mut diagnostics = Vec::new();
+
+    while let (Some(i), Some(l)) = (instr_idx, layer_idx) {
+        let instr = &instructions[i];
+        let layer = &layers[l];
+
+        if instr.keyword == "FROM" {
+            break;
+        }
+
+        instr_idx = instr_idx.and_then(|x| x.checked_sub(1));
+        layer_idx = layer_idx.and_then(|x| x.checked_sub(1));
+
+        if layer.has_vulnerabilities() {
+            let msg = format!(
+                "Vulnerabilities found in layer: {} Critical, {} High, {} Medium, {} Low, {} Negligible",
+                layer.count_vulns_of_severity(VulnSeverity::Critical),
+                layer.count_vulns_of_severity(VulnSeverity::High),
+                layer.count_vulns_of_severity(VulnSeverity::Medium),
+                layer.count_vulns_of_severity(VulnSeverity::Low),
+                layer.count_vulns_of_severity(VulnSeverity::Negligible),
+            );
+            let diagnostic = Diagnostic {
+                range: instr.range,
+                severity: Some(DiagnosticSeverity::WARNING),
+                message: msg,
+                ..Default::default()
+            };
+
+            diagnostics.push(diagnostic);
+
+            fill_vulnerability_hints_for_layer(layer, instr.range, &mut diagnostics)
+        }
+    }
+
+    Ok(diagnostics)
+}
+
+fn fill_vulnerability_hints_for_layer(
+    layer: &LayerScanResult,
+    range: Range,
+    diagnostics: &mut Vec<Diagnostic>,
+) {
+    let vulnerability_types = [
+        VulnSeverity::Critical,
+        VulnSeverity::High,
+        VulnSeverity::Medium,
+        VulnSeverity::Low,
+        VulnSeverity::Negligible,
+    ];
+
+    let vulns_per_severity = vulnerability_types
+        .iter()
+        .flat_map(|sev| layer.vulnerabilities.iter().filter(|l| l.severity == *sev));
+
+    // TODO(fede): eventually we would want to add here a .take() to truncate the number
+    // of vulnerabilities shown as hint per layer.
+    vulns_per_severity.for_each(|vuln| {
+        let url = format!("https://nvd.nist.gov/vuln/detail/{}", vuln.id);
+        diagnostics.push(Diagnostic {
+            range,
+            severity: Some(DiagnosticSeverity::HINT),
+            message: format!("Vulnerability: {} ({:?}) {}", vuln.id, vuln.severity, url),
+            ..Default::default()
+        });
+    });
+}
+
+fn diagnostic_for_image(
+    line: u32,
+    document_text: &str,
+    scan_result: &ImageScanResult,
+) -> Diagnostic {
+    let range_for_selected_line = Range::new(
+        Position::new(line, 0),
+        Position::new(
+            line,
+            document_text
+                .lines()
+                .nth(line as usize)
+                .map(|x| x.len() as u32)
+                .unwrap_or(u32::MAX),
+        ),
+    );
+
+    let mut diagnostic = Diagnostic {
+        range: range_for_selected_line,
+        severity: Some(DiagnosticSeverity::HINT),
+        message: "No vulnerabilities found.".to_owned(),
+        ..Default::default()
+    };
+
+    if scan_result.has_vulnerabilities() {
+        diagnostic.message = format!(
+            "Total vulnerabilities found: {} Critical, {} High, {} Medium, {} Low, {} Negligible",
+            scan_result.count_vulns_of_severity(VulnSeverity::Critical),
+            scan_result.count_vulns_of_severity(VulnSeverity::High),
+            scan_result.count_vulns_of_severity(VulnSeverity::Medium),
+            scan_result.count_vulns_of_severity(VulnSeverity::Low),
+            scan_result.count_vulns_of_severity(VulnSeverity::Negligible),
+        );
+
+        diagnostic.severity = Some(if scan_result.is_compliant {
+            DiagnosticSeverity::INFORMATION
+        } else {
+            DiagnosticSeverity::ERROR
+        });
+    }
+
+    diagnostic
 }

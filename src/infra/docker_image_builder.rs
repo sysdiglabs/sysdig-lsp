@@ -4,7 +4,6 @@ use bollard::{Docker, image::BuildImageOptions, secret::BuildInfo};
 use bytes::Bytes;
 use futures::StreamExt;
 use thiserror::Error;
-use tracing::info;
 
 use crate::app::{ImageBuildError, ImageBuildResult, ImageBuilder};
 
@@ -55,20 +54,23 @@ impl DockerImageBuilder {
                     .and_then(|osstr| osstr.to_str())
                     .unwrap(),
                 t: image_name.as_str(),
-                rm: true,
+                // rm: true,
+                // forcerm: true,
                 ..Default::default()
             },
             None,
             Some(Bytes::from_owner(tar_contents)),
         );
 
+        let mut build_info = Err(DockerImageBuilderError::Generic(
+            "image was built, but no id was detected, this should have never happened".to_string(),
+        ));
         while let Some(result) = results.next().await {
             match result {
                 Ok(BuildInfo { aux, .. }) if aux.is_some() => {
                     let image_id = aux.unwrap().id.unwrap();
-                    info!("image built: {}", &image_id);
-                    return Ok(ImageBuildResult {
-                        image_name,
+                    build_info = Ok(ImageBuildResult {
+                        image_name: image_name.clone(),
                         image_id,
                     });
                 }
@@ -77,9 +79,7 @@ impl DockerImageBuilder {
             }
         }
 
-        Err(DockerImageBuilderError::Generic(
-            "image was built, but no id was detected, this should have never happened".to_string(),
-        ))
+        build_info
     }
 
     async fn pack_containerfile_dir_into_a_tar(

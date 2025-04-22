@@ -1,8 +1,106 @@
 #![allow(dead_code)]
 
 use chrono::{DateTime, NaiveDate, Utc};
+use itertools::Itertools;
 use serde::Deserialize;
 use std::collections::HashMap;
+
+use crate::app::{self, ImageScanResult, LayerScanResult, VulnerabilityEntry};
+
+impl From<SysdigImageScannerReport> for ImageScanResult {
+    fn from(report: SysdigImageScannerReport) -> Self {
+        let vulnerabilities = report
+            .result
+            .as_ref()
+            .and_then(|r| r.vulnerabilities.as_ref())
+            .map(|map| {
+                map.values()
+                    .map(|v| VulnerabilityEntry {
+                        id: v.name.clone(),
+                        severity: severity_for(&v.severity),
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+
+        let is_compliant = report
+            .result
+            .as_ref()
+            .and_then(|r| r.policies.as_ref())
+            .and_then(|p| p.global_evaluation.as_ref())
+            .map(|e| e == &PoliciesGlobalEvaluation::Accepted)
+            .unwrap_or(false);
+
+        let scan_result_response = report.result.as_ref().expect("the report must always have a scan result response, this one didn't, which should never happen");
+        let layers = layers_for_result(scan_result_response);
+
+        ImageScanResult {
+            vulnerabilities,
+            is_compliant,
+            layers: layers.unwrap_or_default(),
+        }
+    }
+}
+
+fn layers_for_result(scan: &ScanResultResponse) -> Option<Vec<LayerScanResult>> {
+    let mut layer_map: HashMap<&String, Vec<VulnerabilityEntry>> = HashMap::new();
+
+    for vuln in scan.vulnerabilities.as_ref()?.values() {
+        let Some(package_ref) = vuln.package_ref.as_ref() else {
+            continue;
+        };
+
+        let Some(package) = scan.packages.get(package_ref) else {
+            continue;
+        };
+
+        let Some(layer_ref) = package.layer_ref.as_ref() else {
+            continue;
+        };
+
+        layer_map
+            .entry(layer_ref)
+            .or_default()
+            .push(VulnerabilityEntry {
+                id: vuln.name.clone(),
+                severity: severity_for(&vuln.severity),
+            });
+    }
+
+    let layers_in_scan = scan.layers.as_ref()?.values();
+
+    let layers_ordered = layers_in_scan.sorted_by(|left, right| left.index.cmp(&right.index));
+
+    let layers_converted_to_layer_scan_result = layers_ordered.map(|layer| {
+        let entries = layer_map.get(&layer.digest).cloned().unwrap_or_default();
+        LayerScanResult {
+            layer_instruction: layer
+                .command
+                .as_deref()
+                .unwrap_or_default()
+                .strip_prefix("/bin/sh -c #(nop) ")
+                .unwrap_or_default()
+                .split_whitespace()
+                .next()
+                .unwrap_or_default()
+                .to_uppercase(),
+            layer_text: layer.command.clone().unwrap_or_default(),
+            vulnerabilities: entries,
+        }
+    });
+
+    Some(layers_converted_to_layer_scan_result.collect())
+}
+
+fn severity_for(sev: &VulnSeverity) -> app::VulnSeverity {
+    match sev {
+        VulnSeverity::Critical => app::VulnSeverity::Critical,
+        VulnSeverity::High => app::VulnSeverity::High,
+        VulnSeverity::Medium => app::VulnSeverity::Medium,
+        VulnSeverity::Low => app::VulnSeverity::Low,
+        VulnSeverity::Negligible => app::VulnSeverity::Negligible,
+    }
+}
 
 #[derive(Debug, Deserialize)]
 pub(super) struct SysdigImageScannerReport {
