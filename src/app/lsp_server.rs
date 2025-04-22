@@ -144,7 +144,7 @@ where
     }
 
     async fn did_change(&self, params: DidChangeTextDocumentParams) {
-        if let Some(change) = params.content_changes.into_iter().last() {
+        if let Some(change) = params.content_changes.into_iter().next_back() {
             self.command_executor
                 .update_document_with_text(params.text_document.uri.as_str(), &change.text)
                 .await;

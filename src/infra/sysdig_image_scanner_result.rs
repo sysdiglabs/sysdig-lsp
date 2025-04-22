@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 
 use chrono::{DateTime, NaiveDate, Utc};
+use itertools::Itertools;
 use serde::Deserialize;
 use std::collections::HashMap;
 
@@ -14,9 +15,9 @@ impl From<SysdigImageScannerReport> for ImageScanResult {
             .as_ref()
             .and_then(|r| r.vulnerabilities.as_ref())
             .map(|map| {
-                map.iter()
-                    .map(|(id, v)| VulnerabilityEntry {
-                        id: id.clone(),
+                map.values()
+                    .map(|v| VulnerabilityEntry {
+                        id: v.name.clone(),
                         severity: severity_for(&v.severity),
                     })
                     .collect::<Vec<_>>()
@@ -46,7 +47,7 @@ impl From<SysdigImageScannerReport> for ImageScanResult {
 fn layers_for_result(scan: &ScanResultResponse) -> Option<Vec<LayerScanResult>> {
     // Agrupa cada vuln por digest de capa
     let mut layer_map: HashMap<&String, Vec<VulnerabilityEntry>> = HashMap::new();
-    for (vuln_id, vuln) in scan.vulnerabilities.as_ref()? {
+    for vuln in scan.vulnerabilities.as_ref()?.values() {
         if let (Some(_pkg), Some(layer_ref)) = (
             vuln.package_ref.as_ref().and_then(|r| scan.packages.get(r)),
             scan.packages
@@ -58,7 +59,7 @@ fn layers_for_result(scan: &ScanResultResponse) -> Option<Vec<LayerScanResult>> 
                 .entry(layer_ref)
                 .or_default()
                 .push(VulnerabilityEntry {
-                    id: vuln_id.clone(),
+                    id: vuln.name.clone(),
                     severity: severity_for(&vuln.severity),
                 });
         }
@@ -67,8 +68,13 @@ fn layers_for_result(scan: &ScanResultResponse) -> Option<Vec<LayerScanResult>> 
     Some(
         scan.layers
             .as_ref()?
-            .iter()
-            .map(|(_, layer)| {
+            .values()
+            .sorted_by(|left, right| {
+                left.index
+                    .unwrap_or_default()
+                    .cmp(&right.index.unwrap_or_default())
+            })
+            .map(|layer| {
                 let entries = layer_map.get(&layer.digest).cloned().unwrap_or_default();
                 LayerScanResult {
                     layer_instruction: layer

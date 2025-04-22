@@ -11,8 +11,8 @@ use tower_lsp::{
 use crate::infra::parse_dockerfile;
 
 use super::{
-    ImageBuilder, ImageScanResult, ImageScanner, InMemoryDocumentDatabase, LSPClient, VulnSeverity,
-    lsp_server::WithContext,
+    ImageBuilder, ImageScanResult, ImageScanner, InMemoryDocumentDatabase, LSPClient,
+    LayerScanResult, VulnSeverity, lsp_server::WithContext,
 };
 
 pub struct CommandExecutor<C> {
@@ -246,51 +246,62 @@ pub fn diagnostics_for_layers(
             break;
         }
 
-        if layer.layer_text.contains(&instr.arguments_str) {
-            instr_idx = instr_idx.and_then(|x| x.checked_sub(1));
-            layer_idx = layer_idx.and_then(|x| x.checked_sub(1));
+        instr_idx = instr_idx.and_then(|x| x.checked_sub(1));
+        layer_idx = layer_idx.and_then(|x| x.checked_sub(1));
 
-            let mut msg = String::new();
-            if layer.count_vulns_of_severity(VulnSeverity::Critical) > 0 {
-                msg += &format!(
-                    "🟣 {}  ",
-                    layer.count_vulns_of_severity(VulnSeverity::Critical)
-                )
-            }
-            if layer.count_vulns_of_severity(VulnSeverity::High) > 0 {
-                msg += &format!("🔴 {}  ", layer.count_vulns_of_severity(VulnSeverity::High))
-            }
-            if layer.count_vulns_of_severity(VulnSeverity::Medium) > 0 {
-                msg += &format!(
-                    "🟠 {}  ",
-                    layer.count_vulns_of_severity(VulnSeverity::Medium)
-                )
-            }
-            if layer.count_vulns_of_severity(VulnSeverity::Low) > 0 {
-                msg += &format!("🟡 {}  ", layer.count_vulns_of_severity(VulnSeverity::Low))
-            }
-            if layer.count_vulns_of_severity(VulnSeverity::Negligible) > 0 {
-                msg += &format!(
-                    "⚪ {}  ",
-                    layer.count_vulns_of_severity(VulnSeverity::Negligible)
-                )
-            }
-
+        if layer.has_vulnerabilities() {
+            let msg = format!(
+                "Vulnerabilities found in layer: {} Critical, {} High, {} Medium, {} Low, {} Negligible",
+                layer.count_vulns_of_severity(VulnSeverity::Critical),
+                layer.count_vulns_of_severity(VulnSeverity::High),
+                layer.count_vulns_of_severity(VulnSeverity::Medium),
+                layer.count_vulns_of_severity(VulnSeverity::Low),
+                layer.count_vulns_of_severity(VulnSeverity::Negligible),
+            );
             let diagnostic = Diagnostic {
                 range: instr.range,
                 severity: Some(DiagnosticSeverity::WARNING),
-                source: Some("Sysdig".to_string()),
                 message: msg,
                 ..Default::default()
             };
 
             diagnostics.push(diagnostic);
-        } else {
-            layer_idx = layer_idx.and_then(|x| x.checked_sub(1));
+
+            fill_vulnerability_hints_for_layer(layer, instr.range, &mut diagnostics)
         }
     }
 
     Ok(diagnostics)
+}
+
+fn fill_vulnerability_hints_for_layer(
+    layer: &LayerScanResult,
+    range: Range,
+    diagnostics: &mut Vec<Diagnostic>,
+) {
+    let vulnerability_types = [
+        VulnSeverity::Critical,
+        VulnSeverity::High,
+        VulnSeverity::Medium,
+        VulnSeverity::Low,
+        VulnSeverity::Negligible,
+    ];
+
+    let vulns_per_severity = vulnerability_types
+        .iter()
+        .flat_map(|sev| layer.vulnerabilities.iter().filter(|l| l.severity == *sev));
+
+    // TODO(fede): eventually we would want to add here a .take() to truncate the number
+    // of vulnerabilities shown as hint per layer.
+    vulns_per_severity.for_each(|vuln| {
+        let url = format!("https://nvd.nist.gov/vuln/detail/{}", vuln.id);
+        diagnostics.push(Diagnostic {
+            range,
+            severity: Some(DiagnosticSeverity::HINT),
+            message: format!("Vulnerability: {} ({:?}) {}", vuln.id, vuln.severity, url),
+            ..Default::default()
+        });
+    });
 }
 
 fn diagnostic_for_image(
@@ -319,7 +330,7 @@ fn diagnostic_for_image(
 
     if scan_result.has_vulnerabilities() {
         diagnostic.message = format!(
-            "Vulnerabilities found: {} Critical, {} High, {} Medium, {} Low, {} Negligible",
+            "Total vulnerabilities found: {} Critical, {} High, {} Medium, {} Low, {} Negligible",
             scan_result.count_vulns_of_severity(VulnSeverity::Critical),
             scan_result.count_vulns_of_severity(VulnSeverity::High),
             scan_result.count_vulns_of_severity(VulnSeverity::Medium),
