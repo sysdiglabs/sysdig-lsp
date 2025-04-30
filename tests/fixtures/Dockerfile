@@ -4,7 +4,7 @@ RUN apk update
 
 RUN apk add curl
 
-RUN curl -L https://ftp.belnet.be/mirror/jenkins/war/2.455/jenkins.war -o /jenkins.war
+RUN curl -L https://get.jenkins.io/war-stable/2.401.3/jenkins.war -o /jenkins.war
 
 FROM nginx:latest
 
