@@ -40,7 +40,7 @@ pub(super) struct ScannerBinaryManager {}
 
 impl ScannerBinaryManager {
     const fn version(&self) -> Version {
-        Version::new(1, 20, 0)
+        Version::new(1, 22, 1)
     }
 
     pub async fn install_expected_version_if_not_present(
@@ -194,7 +194,7 @@ mod tests {
     async fn it_gets_the_wanted_version() {
         let mgr = ScannerBinaryManager::default();
 
-        assert_eq!(mgr.version().to_string(), "1.20.0");
+        assert_eq!(mgr.version().to_string(), "1.22.1");
     }
 
     #[tokio::test]
@@ -202,8 +202,8 @@ mod tests {
         let mgr = ScannerBinaryManager::default();
 
         assert!(
-            mgr.binary_path_for_version(&Version::new(1, 20, 0))
-                .ends_with(".cache/sysdig-cli-scanner/sysdig-cli-scanner.1.20.0")
+            mgr.binary_path_for_version(&Version::new(1, 22, 1))
+                .ends_with(".cache/sysdig-cli-scanner/sysdig-cli-scanner.1.22.1")
         );
     }
 
@@ -212,8 +212,8 @@ mod tests {
         let mgr = ScannerBinaryManager::default();
 
         assert_eq!(
-            mgr.download_url(&Version::new(1, 20, 0)).unwrap(),
-            "https://download.sysdig.com/scanning/bin/sysdig-cli-scanner/1.20.0/linux/amd64/sysdig-cli-scanner"
+            mgr.download_url(&Version::new(1, 22, 1)).unwrap(),
+            "https://download.sysdig.com/scanning/bin/sysdig-cli-scanner/1.22.1/linux/amd64/sysdig-cli-scanner"
         );
     }
 
@@ -234,7 +234,7 @@ mod tests {
                 .await
                 .unwrap()
                 .to_string(),
-            "1.20.0"
+            "1.22.1"
         );
     }
 
@@ -257,7 +257,7 @@ mod tests {
                 .await
                 .unwrap()
                 .to_string(),
-            "1.20.0"
+            "1.22.1"
         );
     }
 }
