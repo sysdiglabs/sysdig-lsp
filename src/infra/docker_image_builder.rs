@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use bollard::{Docker, image::BuildImageOptions, secret::BuildInfo};
+use bollard::{Docker, body_full, query_parameters::BuildImageOptionsBuilder, secret::BuildInfo};
 use bytes::Bytes;
 use futures::StreamExt;
 use thiserror::Error;
@@ -48,18 +48,17 @@ impl DockerImageBuilder {
 
         let image_name = format!("sysdig-lsp-image-build-{}", rand::random::<u8>());
         let mut results = self.docker_client.build_image(
-            BuildImageOptions {
-                dockerfile: containerfile
-                    .file_name()
-                    .and_then(|osstr| osstr.to_str())
-                    .unwrap(),
-                t: image_name.as_str(),
-                // rm: true,
-                // forcerm: true,
-                ..Default::default()
-            },
+            BuildImageOptionsBuilder::new()
+                .dockerfile(
+                    containerfile
+                        .file_name()
+                        .and_then(|osstr| osstr.to_str())
+                        .unwrap(),
+                )
+                .t(&image_name)
+                .build(),
             None,
-            Some(Bytes::from_owner(tar_contents)),
+            Some(body_full(Bytes::from_owner(tar_contents))),
         );
 
         let mut build_info = Err(DockerImageBuilderError::Generic(

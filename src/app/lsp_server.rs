@@ -279,10 +279,16 @@ where
                 .map(|_| None),
         };
 
-        result.map_err(|mut e: Error| {
-            e.message = format!("error calling command: '{command}': {e}").into();
-            e
-        })
+        match result {
+            Ok(_) => result,
+            Err(mut e) => {
+                self.command_executor
+                    .show_message(MessageType::ERROR, e.to_string().as_str())
+                    .await;
+                e.message = format!("error calling command: '{command}': {e}").into();
+                Err(e)
+            }
+        }
     }
 
     async fn shutdown(&self) -> Result<()> {
