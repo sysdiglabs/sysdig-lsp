@@ -14,3 +14,8 @@ lint:
 
 watch:
     cargo watch -x "nextest run"
+
+update:
+    nix flake update
+    cargo update
+    pre-commit autoupdate

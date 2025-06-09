@@ -40,7 +40,7 @@ pub(super) struct ScannerBinaryManager {}
 
 impl ScannerBinaryManager {
     const fn version(&self) -> Version {
-        Version::new(1, 22, 1)
+        Version::new(1, 22, 2)
     }
 
     pub async fn install_expected_version_if_not_present(
@@ -194,7 +194,7 @@ mod tests {
     async fn it_gets_the_wanted_version() {
         let mgr = ScannerBinaryManager::default();
 
-        assert_eq!(mgr.version().to_string(), "1.22.1");
+        assert_eq!(mgr.version().to_string(), "1.22.2");
     }
 
     #[tokio::test]
@@ -234,7 +234,7 @@ mod tests {
                 .await
                 .unwrap()
                 .to_string(),
-            "1.22.1"
+            "1.22.2"
         );
     }
 
@@ -257,7 +257,7 @@ mod tests {
                 .await
                 .unwrap()
                 .to_string(),
-            "1.22.1"
+            "1.22.2"
         );
     }
 }
