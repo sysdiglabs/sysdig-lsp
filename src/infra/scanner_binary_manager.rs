@@ -40,7 +40,7 @@ pub(super) struct ScannerBinaryManager {}
 
 impl ScannerBinaryManager {
     const fn version(&self) -> Version {
-        Version::new(1, 22, 2)
+        Version::new(1, 22, 4)
     }
 
     pub async fn install_expected_version_if_not_present(
@@ -129,8 +129,7 @@ impl ScannerBinaryManager {
         let output = Command::new(binary_path).arg("--version").output().await?;
 
         if !output.status.success() {
-            return Err(ScannerBinaryManagerError::IOError(std::io::Error::new(
-                std::io::ErrorKind::Other,
+            return Err(ScannerBinaryManagerError::IOError(std::io::Error::other(
                 format!(
                     "status command is not succesful: {}",
                     output.status.code().unwrap_or(0)
@@ -194,7 +193,7 @@ mod tests {
     async fn it_gets_the_wanted_version() {
         let mgr = ScannerBinaryManager::default();
 
-        assert_eq!(mgr.version().to_string(), "1.22.2");
+        assert_eq!(mgr.version().to_string(), "1.22.4");
     }
 
     #[tokio::test]
@@ -234,7 +233,7 @@ mod tests {
                 .await
                 .unwrap()
                 .to_string(),
-            "1.22.2"
+            "1.22.4"
         );
     }
 
@@ -257,7 +256,7 @@ mod tests {
                 .await
                 .unwrap()
                 .to_string(),
-            "1.22.2"
+            "1.22.4"
         );
     }
 }

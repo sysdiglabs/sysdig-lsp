@@ -31,12 +31,10 @@ impl<C> CommandExecutor<C> {
     fn image_from_line<'a>(&self, line: u32, contents: &'a str) -> Option<&'a str> {
         let line_number: usize = line.try_into().ok()?;
         let line_that_contains_from = contents.lines().nth(line_number)?;
-        let image = line_that_contains_from
+        line_that_contains_from
             .strip_prefix("FROM ")?
             .split_whitespace()
-            .next();
-
-        image
+            .next()
     }
 }
 
