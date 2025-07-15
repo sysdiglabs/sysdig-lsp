@@ -84,14 +84,13 @@ where
         let image_for_selected_line =
             self.image_from_line(line, &document_text).ok_or_else(|| {
                 Error::parse_error().with_message(format!(
-                    "unable to retrieve image for the selected line: {}",
-                    line
+                    "unable to retrieve image for the selected line: {line}"
                 ))
             })?;
 
         self.show_message(
             MessageType::INFO,
-            format!("Starting scan of {}...", image_for_selected_line).as_str(),
+            format!("Starting scan of {image_for_selected_line}...").as_str(),
         )
         .await;
 
@@ -102,7 +101,7 @@ where
 
         self.show_message(
             MessageType::INFO,
-            format!("Finished scan of {}.", image_for_selected_line).as_str(),
+            format!("Finished scan of {image_for_selected_line}.").as_str(),
         )
         .await;
 
@@ -178,7 +177,7 @@ where
 
         self.show_message(
             MessageType::INFO,
-            format!("Starting build of {}...", uri_without_file_path).as_str(),
+            format!("Starting build of {uri_without_file_path}...").as_str(),
         )
         .await;
 
