@@ -45,7 +45,7 @@ where
     async fn initialize_component_factory_with(&self, config: &Value) -> Result<()> {
         let Ok(config) = serde_json::from_value::<Config>(config.clone()) else {
             return Err(Error::internal_error()
-                .with_message(format!("unable to transform json into config: {}", config)));
+                .with_message(format!("unable to transform json into config: {config}")));
         };
 
         debug!("updating with configuration: {config:?}");
@@ -78,7 +78,7 @@ impl TryFrom<&str> for SupportedCommands {
         match value {
             "sysdig-lsp.execute-scan" => Ok(SupportedCommands::ExecuteBaseImageScan),
             "sysdig-lsp.execute-build-and-scan" => Ok(SupportedCommands::ExecuteBuildAndScan),
-            _ => Err(format!("command not supported: {}", value)),
+            _ => Err(format!("command not supported: {value}")),
         }
     }
 }
@@ -264,7 +264,7 @@ where
 
     async fn execute_command(&self, params: ExecuteCommandParams) -> Result<Option<Value>> {
         let command: SupportedCommands = params.command.as_str().try_into().map_err(|e| {
-            Error::internal_error().with_message(format!("unable to parse command: {}", e))
+            Error::internal_error().with_message(format!("unable to parse command: {e}"))
         })?;
 
         let result = match command {
@@ -355,10 +355,10 @@ async fn execute_command_build_and_scan<C: LSPClient>(
         let mut factory = server.component_factory.write().await;
 
         let image_scanner = factory.image_scanner().map_err(|e| {
-            Error::internal_error().with_message(format!("unable to create image scanner: {}", e))
+            Error::internal_error().with_message(format!("unable to create image scanner: {e}"))
         })?;
         let image_builder = factory.image_builder().map_err(|e| {
-            Error::internal_error().with_message(format!("unable to create image builder: {}", e))
+            Error::internal_error().with_message(format!("unable to create image builder: {e}"))
         })?;
 
         (image_scanner, image_builder)

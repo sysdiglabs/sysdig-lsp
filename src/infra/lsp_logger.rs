@@ -55,6 +55,6 @@ impl tracing::field::Visit for StringVisitor {
         if !self.message.is_empty() {
             self.message.push(' ');
         }
-        self.message.push_str(&format!("{:?}", value));
+        self.message.push_str(&format!("{value:?}"));
     }
 }

@@ -177,7 +177,7 @@ impl ScannerBinaryManager {
     fn binary_path_for_version(&self, version: &Version) -> PathBuf {
         let mut cache_dir = dirs::cache_dir().unwrap_or_else(|| PathBuf::from("."));
         cache_dir.push("sysdig-cli-scanner");
-        cache_dir.push(format!("sysdig-cli-scanner.{}", version));
+        cache_dir.push(format!("sysdig-cli-scanner.{version}"));
         cache_dir
     }
 }
