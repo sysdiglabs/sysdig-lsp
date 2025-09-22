@@ -17,5 +17,5 @@ watch:
 
 update:
     nix flake update
-    cargo update
-    pre-commit autoupdate
+    nix develop --command cargo update
+    nix develop --command pre-commit autoupdate
