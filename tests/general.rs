@@ -159,3 +159,111 @@ async fn when_the_client_asks_for_the_existing_code_lens_but_the_dockerfile_cont
         ]
     );
 }
+
+#[tokio::test]
+async fn when_the_client_asks_for_code_lens_in_a_compose_file_it_receives_them() {
+    let mut client = test::TestClient::new_initialized().await;
+    client
+        .open_file_with_contents(
+            "docker-compose.yml",
+            include_str!("fixtures/docker-compose.yml"),
+        )
+        .await;
+
+    let response = client
+        .request_available_code_lens_in_file("docker-compose.yml")
+        .await;
+
+    assert_eq!(
+        response.unwrap(),
+        vec![
+            CodeLens {
+                range: Range::new(Position::new(2, 11), Position::new(2, 23)),
+                command: Some(Command {
+                    title: "Scan base image".to_string(),
+                    command: "sysdig-lsp.execute-scan".to_string(),
+                    arguments: Some(vec![json!("file://docker-compose.yml/"), json!(2)])
+                }),
+                data: None
+            },
+            CodeLens {
+                range: Range::new(Position::new(4, 11), Position::new(4, 22)),
+                command: Some(Command {
+                    title: "Scan base image".to_string(),
+                    command: "sysdig-lsp.execute-scan".to_string(),
+                    arguments: Some(vec![json!("file://docker-compose.yml/"), json!(4)])
+                }),
+                data: None
+            }
+        ]
+    );
+}
+
+#[tokio::test]
+async fn when_the_client_asks_for_code_actions_in_a_compose_file_it_receives_them() {
+    let mut client = test::TestClient::new_initialized().await;
+    client
+        .open_file_with_contents(
+            "docker-compose.yml",
+            include_str!("fixtures/docker-compose.yml"),
+        )
+        .await;
+
+    let response = client
+        .request_available_actions_in_line("docker-compose.yml", 2)
+        .await;
+
+    assert_eq!(
+        response.unwrap(),
+        vec![CodeActionOrCommand::Command(Command {
+            title: "Scan base image".to_string(),
+            command: "sysdig-lsp.execute-scan".to_string(),
+            arguments: Some(vec![json!("file://docker-compose.yml/"), json!(2)])
+        })]
+    );
+}
+
+#[tokio::test]
+async fn when_the_client_asks_for_code_lens_in_a_complex_compose_yaml_file_it_receives_them() {
+    let mut client = test::TestClient::new_initialized().await;
+    client
+        .open_file_with_contents("compose.yaml", include_str!("fixtures/compose.yaml"))
+        .await;
+
+    let response = client
+        .request_available_code_lens_in_file("compose.yaml")
+        .await;
+
+    assert_eq!(
+        response.unwrap(),
+        vec![
+            CodeLens {
+                range: Range::new(Position::new(4, 13), Position::new(4, 25)),
+                command: Some(Command {
+                    title: "Scan base image".to_string(),
+                    command: "sysdig-lsp.execute-scan".to_string(),
+                    arguments: Some(vec![json!("file://compose.yaml/"), json!(4)])
+                }),
+                data: None
+            },
+            CodeLens {
+                range: Range::new(Position::new(9, 6), Position::new(9, 17)),
+                command: Some(Command {
+                    title: "Scan base image".to_string(),
+                    command: "sysdig-lsp.execute-scan".to_string(),
+                    arguments: Some(vec![json!("file://compose.yaml/"), json!(9)])
+                }),
+                data: None
+            },
+            CodeLens {
+                range: Range::new(Position::new(13, 11), Position::new(13, 21)),
+                command: Some(Command {
+                    title: "Scan base image".to_string(),
+                    command: "sysdig-lsp.execute-scan".to_string(),
+                    arguments: Some(vec![json!("file://compose.yaml/"), json!(13)])
+                }),
+                data: None
+            }
+        ]
+    );
+}

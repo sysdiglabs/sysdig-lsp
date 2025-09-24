@@ -1,0 +1,5 @@
+services:
+  web:
+    image: nginx:latest
+  db:
+    image: postgres:13
