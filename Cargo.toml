@@ -18,12 +18,14 @@ clap = { version = "4.5.34", features = ["derive"] }
 dirs = "6.0.0"
 futures = "0.3.31"
 itertools = "0.14.0"
+marked-yaml = { version = "0.8.0", features = ["serde"] }
 rand = "0.9.0"
 regex = "1.11.1"
 reqwest = "0.12.14"
 semver = "1.0.26"
 serde = { version = "1.0.219", features = ["alloc", "derive"] }
 serde_json = "1.0.135"
+serde_yaml = "0.9.34"
 serial_test = { version = "3.2.0", features = ["file_locks"] }
 tar = "0.4.44"
 thiserror = "2.0.12"

@@ -1,3 +1,4 @@
+mod compose_ast_parser;
 mod docker_image_builder;
 mod dockerfile_ast_parser;
 mod scanner_binary_manager;
