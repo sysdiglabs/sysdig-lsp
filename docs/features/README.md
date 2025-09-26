@@ -18,4 +18,7 @@ Sysdig LSP provides tools to integrate container security checks into your devel
 - Scans each Dockerfile layer individually for precise vulnerability identification.
 - Supports detailed analysis in single-stage and multi-stage Dockerfiles.
 
+## [Docker-compose Image Analysis](./docker_compose_image_analysis.md)
+- Scans the images defined in your `docker-compose.yml` files for vulnerabilities.
+
 See the linked documents for more details.

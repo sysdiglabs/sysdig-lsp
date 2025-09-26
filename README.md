@@ -15,16 +15,16 @@ helping you detect vulnerabilities and misconfigurations earlier in the developm
 
 ## Features
 
-| Feature                         | **[VSCode Extension](https://github.com/sysdiglabs/vscode-extension)** | **[Sysdig LSP](./docs/features/README.md)**              |
-|---------------------------------|------------------------------------------------------------------------|----------------------------------------------------------|
-| Scan base image in Dockerfile   | Supported                                                              | [Supported](./docs/features/scan_base_image.md) (0.1.0+) |
-| Code lens support               | Supported                                                              | [Supported](./docs/features/code_lens.md) (0.2.0+)       |
-| Build and Scan Dockerfile       | Supported                                                              | [Supported](./docs/features/build_and_scan.md) (0.4.0+)  |
-| Layered image analysis          | Supported                                                              | [Supported](./docs/features/layered_analysis.md) (0.5.0+)|
-| Docker-compose image analysis   | Supported                                                              | In roadmap                                               |
-| K8s Manifest image analysis     | Supported                                                              | In roadmap                                               |
-| Infrastructure-as-code analysis | Supported                                                              | In roadmap                                               |
-| Vulnerability explanation       | Supported                                                              | In roadmap                                               |
+| Feature                         | **[VSCode Extension](https://github.com/sysdiglabs/vscode-extension)** | **[Sysdig LSP](./docs/features/README.md)**                            |
+|---------------------------------|------------------------------------------------------------------------|------------------------------------------------------------------------|
+| Scan base image in Dockerfile   | Supported                                                              | [Supported](./docs/features/scan_base_image.md) (0.1.0+)               |
+| Code lens support               | Supported                                                              | [Supported](./docs/features/code_lens.md) (0.2.0+)                     |
+| Build and Scan Dockerfile       | Supported                                                              | [Supported](./docs/features/build_and_scan.md) (0.4.0+)                |
+| Layered image analysis          | Supported                                                              | [Supported](./docs/features/layered_analysis.md) (0.5.0+)              |
+| Docker-compose image analysis   | Supported                                                              | [Supported](./docs/features/docker_compose_image_analysis.md) (0.6.0+) |
+| K8s Manifest image analysis     | Supported                                                              | In roadmap                                                             |
+| Infrastructure-as-code analysis | Supported                                                              | In roadmap                                                             |
+| Vulnerability explanation       | Supported                                                              | In roadmap                                                             |
 
 ## Build
 
