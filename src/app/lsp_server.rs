@@ -352,6 +352,14 @@ async fn execute_command_scan_base_image<C: LSPClient>(
         return Err(Error::internal_error().with_message("line is not a u32"));
     };
 
+    let Some(image_name) = params.arguments.get(2) else {
+        return Err(Error::internal_error().with_message("no image name was provided"));
+    };
+
+    let Some(image_name) = image_name.as_str() else {
+        return Err(Error::internal_error().with_message("image name is not a string"));
+    };
+
     let image_scanner = {
         let mut lock = server.component_factory.write().await;
         lock.image_scanner().map_err(|e| {
@@ -361,7 +369,7 @@ async fn execute_command_scan_base_image<C: LSPClient>(
 
     server
         .command_executor
-        .scan_image_from_file(uri, line, &image_scanner)
+        .scan_image(uri, line, image_name, &image_scanner)
         .await?;
 
     Ok(())
