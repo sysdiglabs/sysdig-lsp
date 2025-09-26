@@ -11,7 +11,7 @@ use tower_lsp::lsp_types::{
     CodeLens, CodeLensOptions, CodeLensParams, Command, DidChangeConfigurationParams,
     DidChangeTextDocumentParams, DidOpenTextDocumentParams, ExecuteCommandOptions,
     ExecuteCommandParams, InitializeParams, InitializeResult, InitializedParams, MessageType,
-    Position, Range, ServerCapabilities, TextDocumentSyncCapability, TextDocumentSyncKind,
+    Range, ServerCapabilities, TextDocumentSyncCapability, TextDocumentSyncKind,
 };
 use tracing::{debug, info};
 
@@ -19,6 +19,7 @@ use super::commands::CommandExecutor;
 use super::component_factory::{ComponentFactory, Config};
 use super::queries::QueryExecutor;
 use super::{InMemoryDocumentDatabase, LSPClient};
+use crate::infra::{parse_compose_file, parse_dockerfile};
 
 pub struct LSPServer<C> {
     command_executor: CommandExecutor<C>,
@@ -80,6 +81,92 @@ impl TryFrom<&str> for SupportedCommands {
             "sysdig-lsp.execute-build-and-scan" => Ok(SupportedCommands::ExecuteBuildAndScan),
             _ => Err(format!("command not supported: {value}")),
         }
+    }
+}
+
+struct CommandInfo {
+    title: String,
+    command: String,
+    arguments: Option<Vec<Value>>,
+    range: Range,
+}
+
+impl<C> LSPServer<C>
+where
+    C: LSPClient + Send + Sync + 'static,
+{
+    fn generate_commands_for_uri(
+        &self,
+        uri: &tower_lsp::lsp_types::Url,
+        content: &str,
+    ) -> Vec<CommandInfo> {
+        let file_uri = uri.as_str();
+
+        if file_uri.contains("docker-compose.yml")
+            || file_uri.contains("compose.yml")
+            || file_uri.contains("docker-compose.yaml")
+            || file_uri.contains("compose.yaml")
+        {
+            self.generate_compose_commands(uri, content)
+        } else {
+            self.generate_dockerfile_commands(uri, content)
+        }
+    }
+
+    fn generate_compose_commands(
+        &self,
+        uri: &tower_lsp::lsp_types::Url,
+        content: &str,
+    ) -> Vec<CommandInfo> {
+        let mut commands = vec![];
+        if let Ok(instructions) = parse_compose_file(content) {
+            for instruction in instructions {
+                commands.push(CommandInfo {
+                    title: "Scan base image".to_string(),
+                    command: SupportedCommands::ExecuteBaseImageScan.to_string(),
+                    arguments: Some(vec![
+                        json!(uri),
+                        json!(instruction.range),
+                        json!(instruction.image_name),
+                    ]),
+                    range: instruction.range,
+                });
+            }
+        }
+        commands
+    }
+
+    fn generate_dockerfile_commands(
+        &self,
+        uri: &tower_lsp::lsp_types::Url,
+        content: &str,
+    ) -> Vec<CommandInfo> {
+        let mut commands = vec![];
+        let instructions = parse_dockerfile(content);
+        if let Some(last_from_instruction) = instructions
+            .iter()
+            .filter(|instruction| instruction.keyword == "FROM")
+            .next_back()
+        {
+            let range = last_from_instruction.range;
+            let line = last_from_instruction.range.start.line;
+            commands.push(CommandInfo {
+                title: "Build and scan".to_string(),
+                command: SupportedCommands::ExecuteBuildAndScan.to_string(),
+                arguments: Some(vec![json!(uri), json!(line)]),
+                range,
+            });
+
+            if let Some(image_name) = last_from_instruction.arguments.first() {
+                commands.push(CommandInfo {
+                    title: "Scan base image".to_string(),
+                    command: SupportedCommands::ExecuteBaseImageScan.to_string(),
+                    arguments: Some(vec![json!(uri), json!(range), json!(image_name)]),
+                    range,
+                });
+            }
+        }
+        commands
     }
 }
 
@@ -152,8 +239,6 @@ where
     }
 
     async fn code_action(&self, params: CodeActionParams) -> Result<Option<CodeActionResponse>> {
-        let mut code_actions = vec![];
-
         let Some(content) = self
             .query_executor
             .get_document_text(params.text_document.uri.as_str())
@@ -165,48 +250,23 @@ where
             )));
         };
 
-        let Some(last_line_starting_with_from_statement) = content
-            .lines()
-            .enumerate()
-            .filter(|(_, line)| line.trim_start().starts_with("FROM "))
-            .map(|(line_num, _)| line_num)
-            .last()
-        else {
-            return Ok(None);
-        };
-
-        let Ok(line_selected_as_usize) = usize::try_from(params.range.start.line) else {
-            return Err(Error::internal_error().with_message(format!(
-                "unable to parse u32 as usize: {}",
-                params.range.start.line
-            )));
-        };
-
-        if last_line_starting_with_from_statement == line_selected_as_usize {
-            code_actions.push(CodeActionOrCommand::Command(Command {
-                title: "Build and scan".to_string(),
-                command: SupportedCommands::ExecuteBuildAndScan.to_string(),
-                arguments: Some(vec![
-                    json!(params.text_document.uri),
-                    json!(line_selected_as_usize),
-                ]),
-            }));
-            code_actions.push(CodeActionOrCommand::Command(Command {
-                title: "Scan base image".to_string(),
-                command: SupportedCommands::ExecuteBaseImageScan.to_string(),
-                arguments: Some(vec![
-                    json!(params.text_document.uri),
-                    json!(line_selected_as_usize),
-                ]),
-            }));
-        }
+        let commands = self.generate_commands_for_uri(&params.text_document.uri, &content);
+        let code_actions: Vec<CodeActionOrCommand> = commands
+            .into_iter()
+            .filter(|cmd| cmd.range.start.line == params.range.start.line)
+            .map(|cmd| {
+                CodeActionOrCommand::Command(Command {
+                    title: cmd.title,
+                    command: cmd.command,
+                    arguments: cmd.arguments,
+                })
+            })
+            .collect();
 
         Ok(Some(code_actions))
     }
 
     async fn code_lens(&self, params: CodeLensParams) -> Result<Option<Vec<CodeLens>>> {
-        let mut code_lens = vec![];
-
         let Some(content) = self
             .query_executor
             .get_document_text(params.text_document.uri.as_str())
@@ -218,48 +278,21 @@ where
             )));
         };
 
-        let Some(last_line_starting_with_from_statement) = content
-            .lines()
-            .enumerate()
-            .filter(|(_, line)| line.trim_start().starts_with("FROM "))
-            .map(|(line_num, _)| line_num)
-            .last()
-        else {
-            return Ok(None);
-        };
+        let commands = self.generate_commands_for_uri(&params.text_document.uri, &content);
+        let code_lenses = commands
+            .into_iter()
+            .map(|cmd| CodeLens {
+                range: cmd.range,
+                command: Some(Command {
+                    title: cmd.title,
+                    command: cmd.command,
+                    arguments: cmd.arguments,
+                }),
+                data: None,
+            })
+            .collect();
 
-        code_lens.push(CodeLens {
-            range: Range::new(
-                Position::new(last_line_starting_with_from_statement as u32, 0),
-                Position::new(last_line_starting_with_from_statement as u32, 0),
-            ),
-            command: Some(Command {
-                title: "Build and scan".to_string(),
-                command: SupportedCommands::ExecuteBuildAndScan.to_string(),
-                arguments: Some(vec![
-                    json!(params.text_document.uri),
-                    json!(last_line_starting_with_from_statement),
-                ]),
-            }),
-            data: None,
-        });
-        code_lens.push(CodeLens {
-            range: Range::new(
-                Position::new(last_line_starting_with_from_statement as u32, 0),
-                Position::new(last_line_starting_with_from_statement as u32, 0),
-            ),
-            command: Some(Command {
-                title: "Scan base image".to_string(),
-                command: SupportedCommands::ExecuteBaseImageScan.to_string(),
-                arguments: Some(vec![
-                    json!(params.text_document.uri),
-                    json!(last_line_starting_with_from_statement),
-                ]),
-            }),
-            data: None,
-        });
-
-        Ok(Some(code_lens))
+        Ok(Some(code_lenses))
     }
 
     async fn execute_command(&self, params: ExecuteCommandParams) -> Result<Option<Value>> {
@@ -308,12 +341,20 @@ async fn execute_command_scan_base_image<C: LSPClient>(
         return Err(Error::internal_error().with_message("uri is not a string"));
     };
 
-    let Some(line) = params.arguments.get(1) else {
-        return Err(Error::internal_error().with_message("no line was provided"));
+    let Some(range) = params.arguments.get(1) else {
+        return Err(Error::internal_error().with_message("no range was provided"));
     };
 
-    let Some(line) = line.as_u64().and_then(|x| u32::try_from(x).ok()) else {
-        return Err(Error::internal_error().with_message("line is not a u32"));
+    let Ok(range) = serde_json::from_value::<Range>(range.clone()) else {
+        return Err(Error::internal_error().with_message("range is not a Range object"));
+    };
+
+    let Some(image_name) = params.arguments.get(2) else {
+        return Err(Error::internal_error().with_message("no image name was provided"));
+    };
+
+    let Some(image_name) = image_name.as_str() else {
+        return Err(Error::internal_error().with_message("image name is not a string"));
     };
 
     let image_scanner = {
@@ -325,7 +366,7 @@ async fn execute_command_scan_base_image<C: LSPClient>(
 
     server
         .command_executor
-        .scan_image_from_file(uri, line, &image_scanner)
+        .scan_image(uri, range, image_name, &image_scanner)
         .await?;
 
     Ok(())

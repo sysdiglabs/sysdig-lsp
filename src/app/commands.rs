@@ -67,59 +67,33 @@ impl<C> CommandExecutor<C>
 where
     C: LSPClient,
 {
-    pub async fn scan_image_from_file(
+    pub async fn scan_image(
         &self,
         uri: &str,
-        line: u32,
+        range: Range,
+        image_name: &str,
         image_scanner: &impl ImageScanner,
     ) -> Result<()> {
-        let document_text = self
-            .document_database
-            .read_document_text(uri)
-            .await
-            .ok_or_else(|| {
-                Error::internal_error().with_message("unable to obtain document to scan")
-            })?;
-
-        let image_for_selected_line =
-            self.image_from_line(line, &document_text).ok_or_else(|| {
-                Error::parse_error().with_message(format!(
-                    "unable to retrieve image for the selected line: {line}"
-                ))
-            })?;
-
         self.show_message(
             MessageType::INFO,
-            format!("Starting scan of {image_for_selected_line}...").as_str(),
+            format!("Starting scan of {image_name}...").as_str(),
         )
         .await;
 
         let scan_result = image_scanner
-            .scan_image(image_for_selected_line)
+            .scan_image(image_name)
             .await
             .map_err(|e| Error::internal_error().with_message(e.to_string()))?;
 
         self.show_message(
             MessageType::INFO,
-            format!("Finished scan of {image_for_selected_line}.").as_str(),
+            format!("Finished scan of {image_name}.").as_str(),
         )
         .await;
 
         let diagnostic = {
-            let range_for_selected_line = Range::new(
-                Position::new(line, 0),
-                Position::new(
-                    line,
-                    document_text
-                        .lines()
-                        .nth(line as usize)
-                        .map(|x| x.len() as u32)
-                        .unwrap_or(u32::MAX),
-                ),
-            );
-
             let mut diagnostic = Diagnostic {
-                range: range_for_selected_line,
+                range,
                 severity: Some(DiagnosticSeverity::HINT),
                 message: "No vulnerabilities found.".to_owned(),
                 ..Default::default()
@@ -128,7 +102,7 @@ where
             if scan_result.has_vulnerabilities() {
                 diagnostic.message = format!(
                     "Vulnerabilities found for {}: {} Critical, {} High, {} Medium, {} Low, {} Negligible",
-                    image_for_selected_line,
+                    image_name,
                     scan_result.count_vulns_of_severity(VulnSeverity::Critical),
                     scan_result.count_vulns_of_severity(VulnSeverity::High),
                     scan_result.count_vulns_of_severity(VulnSeverity::Medium),

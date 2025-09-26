@@ -1,0 +1,14 @@
+# Test compose file with various YAML features
+services:
+  # Web service using a quoted key for the image
+  web:
+    "image": nginx:latest # Inline comment
+
+  # Database service using a literal block scalar for the image
+  db:
+    image: |
+      postgres:13
+
+  # Another service for good measure
+  api:
+    image: my-api:1.0

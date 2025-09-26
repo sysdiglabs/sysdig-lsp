@@ -42,7 +42,11 @@ async fn when_the_client_asks_for_the_existing_code_actions_it_receives_the_avai
             CodeActionOrCommand::Command(Command {
                 title: "Scan base image".to_string(),
                 command: "sysdig-lsp.execute-scan".to_string(),
-                arguments: Some(vec![json!("file://dockerfile/"), json!(0)])
+                arguments: Some(vec![
+                    json!("file://dockerfile/"),
+                    json!({"start": {"line": 0, "character": 0}, "end": {"line": 0, "character": 11}}),
+                    json!("alpine"),
+                ])
             })
         ]
     );
@@ -77,7 +81,11 @@ async fn when_the_client_asks_for_the_existing_code_actions_but_the_dockerfile_c
             CodeActionOrCommand::Command(Command {
                 title: "Scan base image".to_string(),
                 command: "sysdig-lsp.execute-scan".to_string(),
-                arguments: Some(vec![json!("file://dockerfile/"), json!(1)])
+                arguments: Some(vec![
+                    json!("file://dockerfile/"),
+                    json!({"start": {"line": 1, "character": 0}, "end": {"line": 1, "character": 11}}),
+                    json!("ubuntu"),
+                ])
             })
         ]
     );
@@ -102,7 +110,7 @@ async fn when_the_client_asks_for_the_existing_code_lens_it_receives_the_availab
         response.unwrap(),
         vec![
             CodeLens {
-                range: Range::new(Position::new(0, 0), Position::new(0, 0)),
+                range: Range::new(Position::new(0, 0), Position::new(0, 11)),
                 command: Some(Command {
                     title: "Build and scan".to_string(),
                     command: "sysdig-lsp.execute-build-and-scan".to_string(),
@@ -111,11 +119,15 @@ async fn when_the_client_asks_for_the_existing_code_lens_it_receives_the_availab
                 data: None
             },
             CodeLens {
-                range: Range::new(Position::new(0, 0), Position::new(0, 0)),
+                range: Range::new(Position::new(0, 0), Position::new(0, 11)),
                 command: Some(Command {
                     title: "Scan base image".to_string(),
                     command: "sysdig-lsp.execute-scan".to_string(),
-                    arguments: Some(vec![json!("file://dockerfile/"), json!(0)])
+                    arguments: Some(vec![
+                        json!("file://dockerfile/"),
+                        json!({"start": {"line": 0, "character": 0}, "end": {"line": 0, "character": 11}}),
+                        json!("alpine"),
+                    ])
                 }),
                 data: None
             }
@@ -139,7 +151,7 @@ async fn when_the_client_asks_for_the_existing_code_lens_but_the_dockerfile_cont
         response.unwrap(),
         vec![
             CodeLens {
-                range: Range::new(Position::new(1, 0), Position::new(1, 0)),
+                range: Range::new(Position::new(1, 0), Position::new(1, 11)),
                 command: Some(Command {
                     title: "Build and scan".to_string(),
                     command: "sysdig-lsp.execute-build-and-scan".to_string(),
@@ -148,11 +160,147 @@ async fn when_the_client_asks_for_the_existing_code_lens_but_the_dockerfile_cont
                 data: None
             },
             CodeLens {
-                range: Range::new(Position::new(1, 0), Position::new(1, 0)),
+                range: Range::new(Position::new(1, 0), Position::new(1, 11)),
                 command: Some(Command {
                     title: "Scan base image".to_string(),
                     command: "sysdig-lsp.execute-scan".to_string(),
-                    arguments: Some(vec![json!("file://dockerfile/"), json!(1)])
+                    arguments: Some(vec![
+                        json!("file://dockerfile/"),
+                        json!({"start": {"line": 1, "character": 0}, "end": {"line": 1, "character": 11}}),
+                        json!("ubuntu"),
+                    ])
+                }),
+                data: None
+            }
+        ]
+    );
+}
+
+#[tokio::test]
+async fn when_the_client_asks_for_code_lens_in_a_compose_file_it_receives_them() {
+    let mut client = test::TestClient::new_initialized().await;
+    client
+        .open_file_with_contents(
+            "docker-compose.yml",
+            include_str!("fixtures/docker-compose.yml"),
+        )
+        .await;
+
+    let response = client
+        .request_available_code_lens_in_file("docker-compose.yml")
+        .await;
+
+    assert_eq!(
+        response.unwrap(),
+        vec![
+            CodeLens {
+                range: Range::new(Position::new(2, 11), Position::new(2, 23)),
+                command: Some(Command {
+                    title: "Scan base image".to_string(),
+                    command: "sysdig-lsp.execute-scan".to_string(),
+                    arguments: Some(vec![
+                        json!("file://docker-compose.yml/"),
+                        json!({"start": {"line": 2, "character": 11}, "end": {"line": 2, "character": 23}}),
+                        json!("nginx:latest")
+                    ])
+                }),
+                data: None
+            },
+            CodeLens {
+                range: Range::new(Position::new(4, 11), Position::new(4, 22)),
+                command: Some(Command {
+                    title: "Scan base image".to_string(),
+                    command: "sysdig-lsp.execute-scan".to_string(),
+                    arguments: Some(vec![
+                        json!("file://docker-compose.yml/"),
+                        json!({"start": {"line": 4, "character": 11}, "end": {"line": 4, "character": 22}}),
+                        json!("postgres:13")
+                    ])
+                }),
+                data: None
+            }
+        ]
+    );
+}
+
+#[tokio::test]
+async fn when_the_client_asks_for_code_actions_in_a_compose_file_it_receives_them() {
+    let mut client = test::TestClient::new_initialized().await;
+    client
+        .open_file_with_contents(
+            "docker-compose.yml",
+            include_str!("fixtures/docker-compose.yml"),
+        )
+        .await;
+
+    let response = client
+        .request_available_actions_in_line("docker-compose.yml", 2)
+        .await;
+
+    assert_eq!(
+        response.unwrap(),
+        vec![CodeActionOrCommand::Command(Command {
+            title: "Scan base image".to_string(),
+            command: "sysdig-lsp.execute-scan".to_string(),
+            arguments: Some(vec![
+                json!("file://docker-compose.yml/"),
+                json!({"start": {"line": 2, "character": 11}, "end": {"line": 2, "character": 23}}),
+                json!("nginx:latest"),
+            ])
+        })]
+    );
+}
+
+#[tokio::test]
+async fn when_the_client_asks_for_code_lens_in_a_complex_compose_yaml_file_it_receives_them() {
+    let mut client = test::TestClient::new_initialized().await;
+    client
+        .open_file_with_contents("compose.yaml", include_str!("fixtures/compose.yaml"))
+        .await;
+
+    let response = client
+        .request_available_code_lens_in_file("compose.yaml")
+        .await;
+
+    assert_eq!(
+        response.unwrap(),
+        vec![
+            CodeLens {
+                range: Range::new(Position::new(4, 13), Position::new(4, 25)),
+                command: Some(Command {
+                    title: "Scan base image".to_string(),
+                    command: "sysdig-lsp.execute-scan".to_string(),
+                    arguments: Some(vec![
+                        json!("file://compose.yaml/"),
+                        json!({"start": {"line": 4, "character": 13}, "end": {"line": 4, "character": 25}}),
+                        json!("nginx:latest")
+                    ])
+                }),
+                data: None
+            },
+            CodeLens {
+                range: Range::new(Position::new(9, 6), Position::new(9, 17)),
+                command: Some(Command {
+                    title: "Scan base image".to_string(),
+                    command: "sysdig-lsp.execute-scan".to_string(),
+                    arguments: Some(vec![
+                        json!("file://compose.yaml/"),
+                        json!({"start": {"line": 9, "character": 6}, "end": {"line": 9, "character": 17}}),
+                        json!("postgres:13")
+                    ])
+                }),
+                data: None
+            },
+            CodeLens {
+                range: Range::new(Position::new(13, 11), Position::new(13, 21)),
+                command: Some(Command {
+                    title: "Scan base image".to_string(),
+                    command: "sysdig-lsp.execute-scan".to_string(),
+                    arguments: Some(vec![
+                        json!("file://compose.yaml/"),
+                        json!({"start": {"line": 13, "character": 11}, "end": {"line": 13, "character": 21}}),
+                        json!("my-api:1.0")
+                    ])
                 }),
                 data: None
             }
