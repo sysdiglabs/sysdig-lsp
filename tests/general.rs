@@ -42,7 +42,7 @@ async fn when_the_client_asks_for_the_existing_code_actions_it_receives_the_avai
             CodeActionOrCommand::Command(Command {
                 title: "Scan base image".to_string(),
                 command: "sysdig-lsp.execute-scan".to_string(),
-                arguments: Some(vec![json!("file://dockerfile/"), json!(0)])
+                arguments: Some(vec![json!("file://dockerfile/"), json!(0), json!("alpine")])
             })
         ]
     );
@@ -77,7 +77,7 @@ async fn when_the_client_asks_for_the_existing_code_actions_but_the_dockerfile_c
             CodeActionOrCommand::Command(Command {
                 title: "Scan base image".to_string(),
                 command: "sysdig-lsp.execute-scan".to_string(),
-                arguments: Some(vec![json!("file://dockerfile/"), json!(1)])
+                arguments: Some(vec![json!("file://dockerfile/"), json!(1), json!("ubuntu")])
             })
         ]
     );
@@ -115,7 +115,7 @@ async fn when_the_client_asks_for_the_existing_code_lens_it_receives_the_availab
                 command: Some(Command {
                     title: "Scan base image".to_string(),
                     command: "sysdig-lsp.execute-scan".to_string(),
-                    arguments: Some(vec![json!("file://dockerfile/"), json!(0)])
+                    arguments: Some(vec![json!("file://dockerfile/"), json!(0), json!("alpine")])
                 }),
                 data: None
             }
@@ -152,7 +152,7 @@ async fn when_the_client_asks_for_the_existing_code_lens_but_the_dockerfile_cont
                 command: Some(Command {
                     title: "Scan base image".to_string(),
                     command: "sysdig-lsp.execute-scan".to_string(),
-                    arguments: Some(vec![json!("file://dockerfile/"), json!(1)])
+                    arguments: Some(vec![json!("file://dockerfile/"), json!(1), json!("ubuntu")])
                 }),
                 data: None
             }
@@ -182,7 +182,11 @@ async fn when_the_client_asks_for_code_lens_in_a_compose_file_it_receives_them()
                 command: Some(Command {
                     title: "Scan base image".to_string(),
                     command: "sysdig-lsp.execute-scan".to_string(),
-                    arguments: Some(vec![json!("file://docker-compose.yml/"), json!(2)])
+                    arguments: Some(vec![
+                        json!("file://docker-compose.yml/"),
+                        json!(2),
+                        json!("nginx:latest")
+                    ])
                 }),
                 data: None
             },
@@ -191,7 +195,11 @@ async fn when_the_client_asks_for_code_lens_in_a_compose_file_it_receives_them()
                 command: Some(Command {
                     title: "Scan base image".to_string(),
                     command: "sysdig-lsp.execute-scan".to_string(),
-                    arguments: Some(vec![json!("file://docker-compose.yml/"), json!(4)])
+                    arguments: Some(vec![
+                        json!("file://docker-compose.yml/"),
+                        json!(4),
+                        json!("postgres:13")
+                    ])
                 }),
                 data: None
             }
@@ -218,7 +226,11 @@ async fn when_the_client_asks_for_code_actions_in_a_compose_file_it_receives_the
         vec![CodeActionOrCommand::Command(Command {
             title: "Scan base image".to_string(),
             command: "sysdig-lsp.execute-scan".to_string(),
-            arguments: Some(vec![json!("file://docker-compose.yml/"), json!(2)])
+            arguments: Some(vec![
+                json!("file://docker-compose.yml/"),
+                json!(2),
+                json!("nginx:latest")
+            ])
         })]
     );
 }
@@ -242,7 +254,11 @@ async fn when_the_client_asks_for_code_lens_in_a_complex_compose_yaml_file_it_re
                 command: Some(Command {
                     title: "Scan base image".to_string(),
                     command: "sysdig-lsp.execute-scan".to_string(),
-                    arguments: Some(vec![json!("file://compose.yaml/"), json!(4)])
+                    arguments: Some(vec![
+                        json!("file://compose.yaml/"),
+                        json!(4),
+                        json!("nginx:latest")
+                    ])
                 }),
                 data: None
             },
@@ -251,7 +267,11 @@ async fn when_the_client_asks_for_code_lens_in_a_complex_compose_yaml_file_it_re
                 command: Some(Command {
                     title: "Scan base image".to_string(),
                     command: "sysdig-lsp.execute-scan".to_string(),
-                    arguments: Some(vec![json!("file://compose.yaml/"), json!(9)])
+                    arguments: Some(vec![
+                        json!("file://compose.yaml/"),
+                        json!(9),
+                        json!("postgres:13")
+                    ])
                 }),
                 data: None
             },
@@ -260,7 +280,11 @@ async fn when_the_client_asks_for_code_lens_in_a_complex_compose_yaml_file_it_re
                 command: Some(Command {
                     title: "Scan base image".to_string(),
                     command: "sysdig-lsp.execute-scan".to_string(),
-                    arguments: Some(vec![json!("file://compose.yaml/"), json!(13)])
+                    arguments: Some(vec![
+                        json!("file://compose.yaml/"),
+                        json!(13),
+                        json!("my-api:1.0")
+                    ])
                 }),
                 data: None
             }

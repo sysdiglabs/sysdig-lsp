@@ -19,7 +19,7 @@ use super::commands::CommandExecutor;
 use super::component_factory::{ComponentFactory, Config};
 use super::queries::QueryExecutor;
 use super::{InMemoryDocumentDatabase, LSPClient};
-use crate::infra::parse_compose_file;
+use crate::infra::{parse_compose_file, parse_dockerfile};
 
 pub struct LSPServer<C> {
     command_executor: CommandExecutor<C>,
@@ -124,7 +124,11 @@ where
                 commands.push(CommandInfo {
                     title: "Scan base image".to_string(),
                     command: SupportedCommands::ExecuteBaseImageScan.to_string(),
-                    arguments: Some(vec![json!(uri), json!(instruction.range.start.line)]),
+                    arguments: Some(vec![
+                        json!(uri),
+                        json!(instruction.range.start.line),
+                        json!(instruction.image_name),
+                    ]),
                     range: instruction.range,
                 });
             }
@@ -138,35 +142,32 @@ where
         content: &str,
     ) -> Vec<CommandInfo> {
         let mut commands = vec![];
-        if let Some(last_line_starting_with_from_statement) = content
-            .lines()
-            .enumerate()
-            .filter(|(_, line)| line.trim_start().starts_with("FROM "))
-            .map(|(line_num, _)| line_num)
-            .last()
+        let instructions = parse_dockerfile(content);
+        if let Some(last_from_instruction) = instructions
+            .iter()
+            .filter(|instruction| instruction.keyword == "FROM")
+            .next_back()
         {
             let range = Range::new(
-                Position::new(last_line_starting_with_from_statement as u32, 0),
-                Position::new(last_line_starting_with_from_statement as u32, 0),
+                Position::new(last_from_instruction.range.start.line, 0),
+                Position::new(last_from_instruction.range.start.line, 0),
             );
+            let line = last_from_instruction.range.start.line;
             commands.push(CommandInfo {
                 title: "Build and scan".to_string(),
                 command: SupportedCommands::ExecuteBuildAndScan.to_string(),
-                arguments: Some(vec![
-                    json!(uri),
-                    json!(last_line_starting_with_from_statement),
-                ]),
+                arguments: Some(vec![json!(uri), json!(line)]),
                 range,
             });
-            commands.push(CommandInfo {
-                title: "Scan base image".to_string(),
-                command: SupportedCommands::ExecuteBaseImageScan.to_string(),
-                arguments: Some(vec![
-                    json!(uri),
-                    json!(last_line_starting_with_from_statement),
-                ]),
-                range,
-            });
+
+            if let Some(image_name) = last_from_instruction.arguments.first() {
+                commands.push(CommandInfo {
+                    title: "Scan base image".to_string(),
+                    command: SupportedCommands::ExecuteBaseImageScan.to_string(),
+                    arguments: Some(vec![json!(uri), json!(line), json!(image_name)]),
+                    range,
+                });
+            }
         }
         commands
     }
