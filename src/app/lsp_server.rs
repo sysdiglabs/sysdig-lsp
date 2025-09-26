@@ -11,7 +11,7 @@ use tower_lsp::lsp_types::{
     CodeLens, CodeLensOptions, CodeLensParams, Command, DidChangeConfigurationParams,
     DidChangeTextDocumentParams, DidOpenTextDocumentParams, ExecuteCommandOptions,
     ExecuteCommandParams, InitializeParams, InitializeResult, InitializedParams, MessageType,
-    Position, Range, ServerCapabilities, TextDocumentSyncCapability, TextDocumentSyncKind,
+    Range, ServerCapabilities, TextDocumentSyncCapability, TextDocumentSyncKind,
 };
 use tracing::{debug, info};
 
@@ -126,7 +126,7 @@ where
                     command: SupportedCommands::ExecuteBaseImageScan.to_string(),
                     arguments: Some(vec![
                         json!(uri),
-                        json!(instruction.range.start.line),
+                        json!(instruction.range),
                         json!(instruction.image_name),
                     ]),
                     range: instruction.range,
@@ -148,10 +148,7 @@ where
             .filter(|instruction| instruction.keyword == "FROM")
             .next_back()
         {
-            let range = Range::new(
-                Position::new(last_from_instruction.range.start.line, 0),
-                Position::new(last_from_instruction.range.start.line, 0),
-            );
+            let range = last_from_instruction.range;
             let line = last_from_instruction.range.start.line;
             commands.push(CommandInfo {
                 title: "Build and scan".to_string(),
@@ -164,7 +161,7 @@ where
                 commands.push(CommandInfo {
                     title: "Scan base image".to_string(),
                     command: SupportedCommands::ExecuteBaseImageScan.to_string(),
-                    arguments: Some(vec![json!(uri), json!(line), json!(image_name)]),
+                    arguments: Some(vec![json!(uri), json!(range), json!(image_name)]),
                     range,
                 });
             }
@@ -344,12 +341,12 @@ async fn execute_command_scan_base_image<C: LSPClient>(
         return Err(Error::internal_error().with_message("uri is not a string"));
     };
 
-    let Some(line) = params.arguments.get(1) else {
-        return Err(Error::internal_error().with_message("no line was provided"));
+    let Some(range) = params.arguments.get(1) else {
+        return Err(Error::internal_error().with_message("no range was provided"));
     };
 
-    let Some(line) = line.as_u64().and_then(|x| u32::try_from(x).ok()) else {
-        return Err(Error::internal_error().with_message("line is not a u32"));
+    let Ok(range) = serde_json::from_value::<Range>(range.clone()) else {
+        return Err(Error::internal_error().with_message("range is not a Range object"));
     };
 
     let Some(image_name) = params.arguments.get(2) else {
@@ -369,7 +366,7 @@ async fn execute_command_scan_base_image<C: LSPClient>(
 
     server
         .command_executor
-        .scan_image(uri, line, image_name, &image_scanner)
+        .scan_image(uri, range, image_name, &image_scanner)
         .await?;
 
     Ok(())
