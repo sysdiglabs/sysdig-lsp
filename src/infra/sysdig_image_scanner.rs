@@ -124,7 +124,7 @@ impl SysdigImageScanner {
 impl ImageScanner for SysdigImageScanner {
     async fn scan_image(&self, image_pull_string: &str) -> Result<ScanResult, ImageScanError> {
         let scan = self.scan(image_pull_string).await?;
-        Ok(ScanResult::from(&scan))
+        Ok(ScanResult::from(scan))
     }
 }
 

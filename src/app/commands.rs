@@ -104,34 +104,18 @@ where
             };
 
             if !scan_result.vulnerabilities().is_empty() {
+                let vulns = scan_result
+                    .vulnerabilities()
+                    .iter()
+                    .counts_by(|v| v.severity());
                 diagnostic.message = format!(
                     "Vulnerabilities found for {}: {} Critical, {} High, {} Medium, {} Low, {} Negligible",
                     image_name,
-                    scan_result
-                        .vulnerabilities()
-                        .iter()
-                        .filter(|v| { matches!(v.severity(), Severity::Critical) })
-                        .count(),
-                    scan_result
-                        .vulnerabilities()
-                        .iter()
-                        .filter(|v| { matches!(v.severity(), Severity::High) })
-                        .count(),
-                    scan_result
-                        .vulnerabilities()
-                        .iter()
-                        .filter(|v| { matches!(v.severity(), Severity::Medium) })
-                        .count(),
-                    scan_result
-                        .vulnerabilities()
-                        .iter()
-                        .filter(|v| { matches!(v.severity(), Severity::Low) })
-                        .count(),
-                    scan_result
-                        .vulnerabilities()
-                        .iter()
-                        .filter(|v| { matches!(v.severity(), Severity::Negligible) })
-                        .count(),
+                    vulns.get(&Severity::Critical).unwrap_or(&0_usize),
+                    vulns.get(&Severity::High).unwrap_or(&0_usize),
+                    vulns.get(&Severity::Medium).unwrap_or(&0_usize),
+                    vulns.get(&Severity::Low).unwrap_or(&0_usize),
+                    vulns.get(&Severity::Negligible).unwrap_or(&0_usize),
                 );
 
                 diagnostic.severity = Some(if scan_result.evaluation_result().is_passed() {
@@ -245,33 +229,14 @@ pub fn diagnostics_for_layers(
         layer_idx = layer_idx.and_then(|x| x.checked_sub(1));
 
         if !layer.vulnerabilities().is_empty() {
+            let vulns = layer.vulnerabilities().iter().counts_by(|v| v.severity());
             let msg = format!(
                 "Vulnerabilities found in layer: {} Critical, {} High, {} Medium, {} Low, {} Negligible",
-                layer
-                    .vulnerabilities()
-                    .iter()
-                    .filter(|v| { matches!(v.severity(), Severity::Critical) })
-                    .count(),
-                layer
-                    .vulnerabilities()
-                    .iter()
-                    .filter(|v| { matches!(v.severity(), Severity::High) })
-                    .count(),
-                layer
-                    .vulnerabilities()
-                    .iter()
-                    .filter(|v| { matches!(v.severity(), Severity::Medium) })
-                    .count(),
-                layer
-                    .vulnerabilities()
-                    .iter()
-                    .filter(|v| { matches!(v.severity(), Severity::Low) })
-                    .count(),
-                layer
-                    .vulnerabilities()
-                    .iter()
-                    .filter(|v| { matches!(v.severity(), Severity::Negligible) })
-                    .count(),
+                vulns.get(&Severity::Critical).unwrap_or(&0_usize),
+                vulns.get(&Severity::High).unwrap_or(&0_usize),
+                vulns.get(&Severity::Medium).unwrap_or(&0_usize),
+                vulns.get(&Severity::Low).unwrap_or(&0_usize),
+                vulns.get(&Severity::Negligible).unwrap_or(&0_usize),
             );
             let diagnostic = Diagnostic {
                 range: instr.range,
@@ -339,33 +304,17 @@ fn diagnostic_for_image(line: u32, document_text: &str, scan_result: &ScanResult
     };
 
     if !scan_result.vulnerabilities().is_empty() {
+        let vulns = scan_result
+            .vulnerabilities()
+            .iter()
+            .counts_by(|v| v.severity());
         diagnostic.message = format!(
             "Total vulnerabilities found: {} Critical, {} High, {} Medium, {} Low, {} Negligible",
-            scan_result
-                .vulnerabilities()
-                .iter()
-                .filter(|v| { matches!(v.severity(), Severity::Critical) })
-                .count(),
-            scan_result
-                .vulnerabilities()
-                .iter()
-                .filter(|v| { matches!(v.severity(), Severity::High) })
-                .count(),
-            scan_result
-                .vulnerabilities()
-                .iter()
-                .filter(|v| { matches!(v.severity(), Severity::Medium) })
-                .count(),
-            scan_result
-                .vulnerabilities()
-                .iter()
-                .filter(|v| { matches!(v.severity(), Severity::Low) })
-                .count(),
-            scan_result
-                .vulnerabilities()
-                .iter()
-                .filter(|v| { matches!(v.severity(), Severity::Negligible) })
-                .count(),
+            vulns.get(&Severity::Critical).unwrap_or(&0_usize),
+            vulns.get(&Severity::High).unwrap_or(&0_usize),
+            vulns.get(&Severity::Medium).unwrap_or(&0_usize),
+            vulns.get(&Severity::Low).unwrap_or(&0_usize),
+            vulns.get(&Severity::Negligible).unwrap_or(&0_usize),
         );
 
         diagnostic.severity = Some(if scan_result.evaluation_result().is_passed() {

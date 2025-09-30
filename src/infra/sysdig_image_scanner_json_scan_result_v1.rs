@@ -15,8 +15,8 @@ use crate::domain::scanresult::{
     severity::Severity,
 };
 
-impl From<&JsonScanResultV1> for ScanResult {
-    fn from(report: &JsonScanResultV1) -> Self {
+impl From<JsonScanResultV1> for ScanResult {
+    fn from(report: JsonScanResultV1) -> Self {
         let mut scan_result = ScanResult::from(&report.result.metadata);
 
         add_layers(&report.result, &mut scan_result);
@@ -225,20 +225,20 @@ fn arch_from_str(string: &str) -> Architecture {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub(super) struct JsonScanResultV1 {
     pub info: JsonInfo,
     pub scanner: JsonScanner,
     pub result: JsonResult,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub(super) struct JsonScanner {
     pub name: String,
     pub version: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub(super) struct JsonInfo {
     #[serde(rename = "scanTime")]
     pub scan_time: DateTime<Utc>,
@@ -283,7 +283,7 @@ pub enum ImageMetadataArchitecture {
 }
 
 #[derive(Debug, Deserialize, PartialEq, Eq, Hash, Clone)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "lowercase")]
 pub enum JsonSeverity {
     Critical,
     High,
@@ -304,7 +304,7 @@ impl From<JsonSeverity> for Severity {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub(super) struct JsonBundle {
     #[serde(rename = "identifier", default)]
     pub identifier: String,
@@ -316,7 +316,7 @@ pub(super) struct JsonBundle {
     pub bundle_type: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub(super) struct JsonCvssScore {
     pub score: f32,
     #[serde(default)] // FIXME(fede): test this
@@ -324,7 +324,7 @@ pub(super) struct JsonCvssScore {
     pub version: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub(super) struct JsonLayer {
     #[serde(rename = "command", default)]
     pub command: Option<String>,
@@ -336,7 +336,7 @@ pub(super) struct JsonLayer {
     pub size: Option<u64>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub(super) struct JsonPackage {
     #[serde(rename = "isRemoved", default)]
     pub is_removed: bool,
@@ -400,7 +400,7 @@ impl From<JsonPackageType> for PackageType {
     }
 }
 
-#[derive(Debug, Deserialize, Default)]
+#[derive(Debug, Deserialize, Default, Clone)]
 pub(super) struct JsonPolicies {
     #[serde(rename = "globalEvaluation", default)]
     pub global_evaluation: String,
@@ -408,7 +408,7 @@ pub(super) struct JsonPolicies {
     pub evaluations: Option<Vec<JsonPolicy>>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub(super) struct JsonPolicy {
     #[serde(rename = "bundles", default)]
     pub bundles: Option<Vec<JsonBundle>>,
@@ -426,13 +426,13 @@ pub(super) struct JsonPolicy {
     pub updated_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Deserialize, Default)]
+#[derive(Debug, Deserialize, Default, Clone)]
 pub(super) struct JsonProducer {
     #[serde(rename = "producedAt", default)]
     pub produced_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub(super) struct JsonRiskAccept {
     #[serde(rename = "createdAt")]
     pub created_at: DateTime<Utc>,
@@ -479,7 +479,7 @@ impl From<JsonRiskAcceptReason> for AcceptedRiskReason {
         }
     }
 }
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub(super) struct JsonRule {
     #[serde(rename = "description")]
     pub description: String,
@@ -495,7 +495,7 @@ pub(super) struct JsonRule {
     pub rule_type: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub(super) struct JsonFailure {
     #[serde(rename = "remediation", default)]
     pub remediation: String,
@@ -505,7 +505,7 @@ pub(super) struct JsonFailure {
     pub vulnerability_ref: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub(super) struct JsonResult {
     #[serde(rename = "assetType")]
     pub asset_type: String,
@@ -527,7 +527,7 @@ pub(super) struct JsonResult {
     pub vulnerabilities: HashMap<String, JsonVulnerability>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub(super) struct JsonMetadata {
     #[serde(rename = "architecture")]
     pub architecture: String,
@@ -551,7 +551,7 @@ pub(super) struct JsonMetadata {
     pub size: u64,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub(super) struct JsonVulnerability {
     #[serde(rename = "cvssScore")]
     pub cvss_score: JsonCvssScore,
@@ -573,4 +573,63 @@ pub(super) struct JsonVulnerability {
     pub severity: JsonSeverity,
     #[serde(rename = "solutionDate", default)]
     pub solution_date: Option<NaiveDate>,
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{
+        domain::scanresult::{scan_result::ScanResult, severity::Severity},
+        infra::sysdig_image_scanner_json_scan_result_v1::JsonScanResultV1,
+    };
+
+    #[test]
+    fn it_loads_postgres13() {
+        let postgres_13_json = include_bytes!("../../tests/fixtures/scan-results/postgres_13.json");
+        let json_scan_result: JsonScanResultV1 = serde_json::from_slice(postgres_13_json).unwrap();
+
+        let scan_result: ScanResult = json_scan_result.clone().into();
+
+        assert_eq!(json_scan_result.result.vulnerabilities.len(), 100);
+        assert_eq!(
+            scan_result
+                .vulnerabilities()
+                .iter()
+                .filter(|v| v.severity() == Severity::Critical)
+                .count(),
+            2
+        );
+        assert_eq!(
+            scan_result
+                .vulnerabilities()
+                .iter()
+                .filter(|v| v.severity() == Severity::High)
+                .count(),
+            3
+        );
+        assert_eq!(
+            scan_result
+                .vulnerabilities()
+                .iter()
+                .filter(|v| v.severity() == Severity::Medium)
+                .count(),
+            1
+        );
+        assert_eq!(
+            scan_result
+                .vulnerabilities()
+                .iter()
+                .filter(|v| v.severity() == Severity::Low)
+                .count(),
+            2
+        );
+        assert_eq!(
+            scan_result
+                .vulnerabilities()
+                .iter()
+                .filter(|v| v.severity() == Severity::Negligible)
+                .count(),
+            32
+        );
+        // assert_eq!(scan_result.vulnerabilities().len(), 97);
+    }
 }
