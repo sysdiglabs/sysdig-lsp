@@ -3,7 +3,7 @@ mod docker_image_builder;
 mod dockerfile_ast_parser;
 mod scanner_binary_manager;
 mod sysdig_image_scanner;
-mod sysdig_image_scanner_result;
+mod sysdig_image_scanner_json_scan_result_v1;
 
 pub use sysdig_image_scanner::{SysdigAPIToken, SysdigImageScanner};
 pub mod lsp_logger;

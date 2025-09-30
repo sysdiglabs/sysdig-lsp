@@ -7,6 +7,7 @@ use std::sync::{Arc, RwLock};
 
 pub struct Layer {
     digest: String,
+    index: usize,
     size: Option<u64>,
     command: String,
     packages: RwLock<HashSet<Arc<Package>>>,
@@ -25,11 +26,13 @@ impl Debug for Layer {
 impl Layer {
     pub(in crate::domain::scanresult) fn new(
         digest: String,
+        index: usize,
         size: Option<u64>,
         command: String,
     ) -> Self {
         Self {
             digest,
+            index,
             size,
             command,
             packages: RwLock::new(HashSet::new()),
@@ -42,6 +45,10 @@ impl Layer {
         } else {
             Some(&self.digest)
         }
+    }
+
+    pub fn index(&self) -> usize {
+        self.index
     }
 
     pub fn size(&self) -> Option<&u64> {

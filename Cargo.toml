@@ -25,16 +25,16 @@ reqwest = "0.12.14"
 semver = "1.0.26"
 serde = { version = "1.0.219", features = ["alloc", "derive"] }
 serde_json = "1.0.135"
-serde_yaml = "0.9.34"
 serial_test = { version = "3.2.0", features = ["file_locks"] }
 tar = "0.4.44"
 thiserror = "2.0.12"
 tokio = { version = "1.43.0", features = ["full"] }
 tower-lsp = "0.20.0"
-tower-service = "0.3.3"
 tracing = "0.1.41"
 tracing-subscriber = "0.3.19"
 
 [dev-dependencies]
 itertools = "0.14.0"
 lazy_static = "1.5.0"
+tracing-subscriber = { version = "0.3.19", features = ["fmt", "env-filter"] }
+tracing-test = "0.2.5"

@@ -12,11 +12,12 @@ use crate::domain::scanresult::policy_bundle::PolicyBundle;
 use crate::domain::scanresult::scan_type::ScanType;
 use crate::domain::scanresult::severity::Severity;
 use crate::domain::scanresult::vulnerability::Vulnerability;
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, NaiveDate, Utc};
+use itertools::Itertools;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-#[derive(PartialEq, Eq)]
+#[derive(PartialEq, Eq, Clone)]
 pub struct ScanResult {
     scan_type: ScanType,
     metadata: Metadata,
@@ -34,7 +35,7 @@ impl ScanResult {
         scan_type: ScanType,
         pull_string: String,
         image_id: String,
-        digest: String,
+        digest: Option<String>,
         base_os: OperatingSystem,
         size_in_bytes: u64,
         architecture: Architecture,
@@ -70,8 +71,14 @@ impl ScanResult {
         &self.metadata
     }
 
-    pub fn add_layer(&mut self, digest: String, size: Option<u64>, command: String) -> Arc<Layer> {
-        let layer = Arc::new(Layer::new(digest.clone(), size, command));
+    pub fn add_layer(
+        &mut self,
+        digest: String,
+        index: usize,
+        size: Option<u64>,
+        command: String,
+    ) -> Arc<Layer> {
+        let layer = Arc::new(Layer::new(digest.clone(), index, size, command));
         self.layers.insert(digest, layer.clone());
         layer
     }
@@ -81,7 +88,11 @@ impl ScanResult {
     }
 
     pub fn layers(&self) -> Vec<Arc<Layer>> {
-        self.layers.values().cloned().collect()
+        self.layers
+            .values()
+            .cloned()
+            .sorted_by(|a, b| a.index().cmp(&b.index()))
+            .collect()
     }
 
     pub fn add_package(
@@ -116,8 +127,8 @@ impl ScanResult {
         &mut self,
         cve: String,
         severity: Severity,
-        disclosure_date: DateTime<Utc>,
-        solution_date: Option<DateTime<Utc>>,
+        disclosure_date: NaiveDate,
+        solution_date: Option<NaiveDate>,
         exploitable: bool,
         fix_version: Option<String>,
     ) -> Arc<Vulnerability> {
@@ -194,7 +205,7 @@ impl ScanResult {
         id: String,
         reason: AcceptedRiskReason,
         description: String,
-        expiration_date: Option<DateTime<Utc>>,
+        expiration_date: Option<NaiveDate>,
         is_active: bool,
         created_at: DateTime<Utc>,
         updated_at: DateTime<Utc>,
@@ -253,7 +264,7 @@ mod tests {
             ScanType::Docker,
             "alpine:latest".to_string(),
             "sha256:12345".to_string(),
-            "sha256:67890".to_string(),
+            Some("sha256:67890".to_string()),
             OperatingSystem::new(Family::Linux, "alpine:3.18".to_string()),
             123456,
             Architecture::Amd64,
@@ -278,7 +289,8 @@ mod tests {
     #[test]
     fn add_and_find_layer() {
         let mut scan_result = create_scan_result();
-        let layer = scan_result.add_layer("sha256:abc".to_string(), Some(100), "CMD".to_string());
+        let layer =
+            scan_result.add_layer("sha256:abc".to_string(), 0, Some(100), "CMD".to_string());
 
         assert_eq!(scan_result.layers().len(), 1);
         assert_eq!(scan_result.layers()[0], layer);
@@ -293,7 +305,8 @@ mod tests {
     #[test]
     fn add_package_test() {
         let mut scan_result = create_scan_result();
-        let layer = scan_result.add_layer("sha256:abc".to_string(), Some(100), "CMD".to_string());
+        let layer =
+            scan_result.add_layer("sha256:abc".to_string(), 0, Some(100), "CMD".to_string());
         let package = scan_result.add_package(
             PackageType::Os,
             "musl".to_string(),
@@ -317,7 +330,7 @@ mod tests {
         let vuln = scan_result.add_vulnerability(
             "CVE-2023-1234".to_string(),
             Severity::High,
-            Utc::now(),
+            Utc::now().naive_utc().date(),
             None,
             false,
             Some("1.2.4".to_string()),
@@ -336,7 +349,8 @@ mod tests {
     #[test]
     fn mix_vulns_and_packages() {
         let mut scan_result = create_scan_result();
-        let layer = scan_result.add_layer("sha256:abc".to_string(), Some(100), "CMD".to_string());
+        let layer =
+            scan_result.add_layer("sha256:abc".to_string(), 0, Some(100), "CMD".to_string());
         let package = scan_result.add_package(
             PackageType::Os,
             "musl".to_string(),
@@ -347,7 +361,7 @@ mod tests {
         let vuln = scan_result.add_vulnerability(
             "CVE-2023-1234".to_string(),
             Severity::High,
-            Utc::now(),
+            Utc::now().naive_utc().date(),
             None,
             false,
             Some("1.2.4".to_string()),
@@ -442,7 +456,7 @@ mod tests {
         let vuln = scan_result.add_vulnerability(
             "CVE-2023-1234".to_string(),
             Severity::High,
-            Utc::now(),
+            Utc::now().naive_utc().date(),
             None,
             false,
             Some("1.2.4".to_string()),
@@ -466,7 +480,8 @@ mod tests {
             Utc::now(),
             Utc::now(),
         );
-        let layer = scan_result.add_layer("sha256:abc".to_string(), Some(100), "CMD".to_string());
+        let layer =
+            scan_result.add_layer("sha256:abc".to_string(), 0, Some(100), "CMD".to_string());
         let package = scan_result.add_package(
             PackageType::Os,
             "musl".to_string(),
@@ -529,12 +544,13 @@ mod tests {
         assert!(metadata.labels().is_empty());
 
         // Layer
-        let layer = scan_result.add_layer("sha256:abc".to_string(), Some(100), "CMD".to_string());
+        let layer =
+            scan_result.add_layer("sha256:abc".to_string(), 0, Some(100), "CMD".to_string());
         assert_eq!(layer.digest(), Some("sha256:abc"));
         assert_eq!(layer.size(), Some(&100));
         assert_eq!(layer.command(), "CMD");
         assert!(format!("{:?}", layer).contains("sha256:abc"));
-        let empty_digest_layer = scan_result.add_layer("".to_string(), None, "ADD".to_string());
+        let empty_digest_layer = scan_result.add_layer("".to_string(), 0, None, "ADD".to_string());
         assert!(empty_digest_layer.digest().is_none());
 
         // Package
@@ -556,15 +572,15 @@ mod tests {
         let vuln = scan_result.add_vulnerability(
             "CVE-1".to_string(),
             Severity::High,
-            now,
-            Some(now),
+            now.naive_utc().date(),
+            Some(now.naive_utc().date()),
             true,
             Some("1.2.4".to_string()),
         );
         assert_eq!(vuln.cve(), "CVE-1");
         assert_eq!(vuln.severity(), Severity::High);
-        assert_eq!(vuln.disclosure_date(), now);
-        assert_eq!(vuln.solution_date(), Some(now));
+        assert_eq!(vuln.disclosure_date(), now.naive_utc().date());
+        assert_eq!(vuln.solution_date(), Some(now.naive_utc().date()));
         assert!(vuln.exploitable());
         assert!(vuln.fixable());
         assert_eq!(vuln.fix_version(), Some("1.2.4"));
@@ -575,14 +591,14 @@ mod tests {
             "risk-1".to_string(),
             AcceptedRiskReason::Custom,
             "desc".to_string(),
-            Some(now),
+            Some(now.naive_utc().date()),
             true,
             now,
             now,
         );
         assert_eq!(risk.reason(), &AcceptedRiskReason::Custom);
         assert_eq!(risk.description(), "desc");
-        assert_eq!(risk.expiration_date(), Some(now));
+        assert_eq!(risk.expiration_date(), Some(now.naive_utc().date()));
         assert!(risk.is_active());
         assert_eq!(risk.created_at(), now);
         assert_eq!(risk.updated_at(), now);
@@ -616,7 +632,7 @@ mod tests {
         let vuln = scan_result.add_vulnerability(
             "CVE-1".to_string(),
             Severity::High,
-            now,
+            now.naive_utc().date(),
             None,
             false,
             None,
@@ -624,7 +640,7 @@ mod tests {
         let vuln2 = scan_result.add_vulnerability(
             "CVE-1".to_string(),
             Severity::High,
-            now,
+            now.naive_utc().date(),
             None,
             false,
             None,
@@ -633,8 +649,8 @@ mod tests {
         assert_eq!(scan_result.vulnerabilities().len(), 1);
 
         // Add layer twice
-        let layer = scan_result.add_layer("layer-1".to_string(), None, "CMD".to_string());
-        let layer2 = scan_result.add_layer("layer-1".to_string(), None, "CMD".to_string());
+        let layer = scan_result.add_layer("layer-1".to_string(), 0, None, "CMD".to_string());
+        let layer2 = scan_result.add_layer("layer-1".to_string(), 0, None, "CMD".to_string());
         assert_ne!(Arc::as_ptr(&layer), Arc::as_ptr(&layer2)); // It creates a new Arc and replaces.
         assert_eq!(scan_result.layers().len(), 1);
 

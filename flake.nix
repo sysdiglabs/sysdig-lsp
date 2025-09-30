@@ -42,6 +42,7 @@
                 cargo
                 cargo-audit
                 cargo-expand
+                cargo-machete
                 cargo-nextest
                 cargo-tarpaulin
                 cargo-watch

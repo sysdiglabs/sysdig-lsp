@@ -3,11 +3,11 @@ use crate::domain::scanresult::operating_system::OperatingSystem;
 use chrono::{DateTime, Utc};
 use std::collections::HashMap;
 
-#[derive(PartialEq, Eq)]
+#[derive(PartialEq, Eq, Clone)]
 pub struct Metadata {
     pull_string: String,
     image_id: String,
-    digest: String,
+    digest: Option<String>,
     base_os: OperatingSystem,
     size_in_bytes: u64,
     architecture: Architecture,
@@ -20,7 +20,7 @@ impl Metadata {
     pub(in crate::domain::scanresult) fn new(
         pull_string: String,
         image_id: String,
-        digest: String,
+        digest: Option<String>,
         base_os: OperatingSystem,
         size_in_bytes: u64,
         architecture: Architecture,
@@ -48,11 +48,7 @@ impl Metadata {
     }
 
     pub fn digest(&self) -> Option<&str> {
-        if self.digest.is_empty() {
-            None
-        } else {
-            Some(&self.digest)
-        }
+        self.digest.as_deref()
     }
 
     pub fn base_os(&self) -> &OperatingSystem {

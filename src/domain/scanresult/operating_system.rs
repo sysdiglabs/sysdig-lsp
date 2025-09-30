@@ -6,7 +6,7 @@ pub enum Family {
     Unknown,
 }
 
-#[derive(PartialEq, Eq, Hash)]
+#[derive(PartialEq, Eq, Hash, Clone)]
 pub struct OperatingSystem {
     family: Family,
     name: String,

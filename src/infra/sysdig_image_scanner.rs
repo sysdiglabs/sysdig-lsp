@@ -6,11 +6,14 @@ use serde::Deserialize;
 use thiserror::Error;
 use tokio::{process::Command, sync::Mutex};
 
-use crate::app::{ImageScanError, ImageScanResult, ImageScanner};
+use crate::{
+    app::{ImageScanError, ImageScanner},
+    domain::scanresult::scan_result::ScanResult,
+};
 
 use super::{
     scanner_binary_manager::{ScannerBinaryManager, ScannerBinaryManagerError},
-    sysdig_image_scanner_result::SysdigImageScannerReport,
+    sysdig_image_scanner_json_scan_result_v1::JsonScanResultV1,
 };
 
 #[derive(Clone)]
@@ -71,7 +74,7 @@ impl SysdigImageScanner {
     async fn scan(
         &self,
         image_pull_string: &str,
-    ) -> Result<SysdigImageScannerReport, SysdigImageScannerError> {
+    ) -> Result<JsonScanResultV1, SysdigImageScannerError> {
         let path_to_cli = self
             .scanner_binary_manager
             .lock()
@@ -113,25 +116,38 @@ impl SysdigImageScanner {
             _ => {}
         };
 
-        let report: SysdigImageScannerReport = serde_json::from_slice(&output.stdout)?;
-
-        Ok(report)
+        deserialize_with_debug(&output.stdout)
     }
 }
 
 #[async_trait::async_trait]
 impl ImageScanner for SysdigImageScanner {
-    async fn scan_image(&self, image_pull_string: &str) -> Result<ImageScanResult, ImageScanError> {
-        Ok(self.scan(image_pull_string).await?.into())
+    async fn scan_image(&self, image_pull_string: &str) -> Result<ScanResult, ImageScanError> {
+        let scan = self.scan(image_pull_string).await?;
+        Ok(ScanResult::from(&scan))
     }
+}
+
+fn deserialize_with_debug(json_bytes: &[u8]) -> Result<JsonScanResultV1, SysdigImageScannerError> {
+    let output_json = String::from_utf8_lossy(json_bytes);
+    serde_json::from_str(&output_json).map_err(|e| {
+        tracing::error!(
+            "Failed to deserialize scanner output. Raw JSON: {}",
+            output_json
+        );
+        SysdigImageScannerError::ReportDeserialization(e)
+    })
 }
 
 #[cfg(test)]
 #[serial_test::file_serial]
 mod tests {
+    use crate::infra::sysdig_image_scanner::deserialize_with_debug;
     use lazy_static::lazy_static;
 
-    use crate::app::{ImageScanner, VulnSeverity};
+    use tracing_test::traced_test;
+
+    use crate::app::ImageScanner;
 
     use super::{SysdigAPIToken, SysdigImageScanner};
 
@@ -149,9 +165,8 @@ mod tests {
 
         let report = scanner.scan("ubuntu:22.04").await.unwrap();
 
-        assert!(report.info.is_some());
-        assert!(report.scanner.is_some());
-        assert!(report.result.is_some());
+        assert_eq!(report.scanner.name, "sysdig-cli-scanner");
+        assert_eq!(report.result.metadata.pull_string, "ubuntu:22.04");
     }
 
     #[tokio::test]
@@ -166,11 +181,26 @@ mod tests {
             .await
             .unwrap();
 
-        assert!(report.count_vulns_of_severity(VulnSeverity::Critical) == 0);
-        assert!(report.count_vulns_of_severity(VulnSeverity::High) == 0);
-        assert!(report.count_vulns_of_severity(VulnSeverity::Medium) > 0);
-        assert!(report.count_vulns_of_severity(VulnSeverity::Low) > 0);
-        assert!(report.count_vulns_of_severity(VulnSeverity::Negligible) > 0);
-        assert!(!report.is_compliant);
+        assert_eq!(
+            report.metadata().pull_string(),
+            "ubuntu@sha256:a76d0e9d99f0e91640e35824a6259c93156f0f07b7778ba05808c750e7fa6e68"
+        );
+
+        assert!(!report.layers().is_empty());
+        assert!(!report.vulnerabilities().is_empty());
+        assert!(!report.packages().is_empty());
+        assert!(report.evaluation_result().is_failed());
+    }
+
+    #[test]
+    #[traced_test]
+    fn it_logs_invalid_json_on_deserialization_error() {
+        let invalid_json = b"{\"foo\": \"bar\"}";
+
+        let result = deserialize_with_debug(invalid_json);
+        assert!(result.is_err());
+        assert!(logs_contain(
+            "Failed to deserialize scanner output. Raw JSON: {\"foo\": \"bar\"}"
+        ));
     }
 }

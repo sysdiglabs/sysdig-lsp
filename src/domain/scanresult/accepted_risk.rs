@@ -2,7 +2,7 @@ use crate::domain::scanresult::accepted_risk_reason::AcceptedRiskReason;
 use crate::domain::scanresult::package::Package;
 use crate::domain::scanresult::vulnerability::Vulnerability;
 use crate::domain::scanresult::weak_hash::WeakHash;
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, NaiveDate, Utc};
 use std::collections::HashSet;
 use std::fmt::Debug;
 use std::hash::{Hash, Hasher};
@@ -12,7 +12,7 @@ pub struct AcceptedRisk {
     id: String,
     reason: AcceptedRiskReason,
     description: String,
-    expiration_date: Option<DateTime<Utc>>,
+    expiration_date: Option<NaiveDate>,
     is_active: bool,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
@@ -40,7 +40,7 @@ impl AcceptedRisk {
         id: String,
         reason: AcceptedRiskReason,
         description: String,
-        expiration_date: Option<DateTime<Utc>>,
+        expiration_date: Option<NaiveDate>,
         is_active: bool,
         created_at: DateTime<Utc>,
         updated_at: DateTime<Utc>,
@@ -70,7 +70,7 @@ impl AcceptedRisk {
         &self.description
     }
 
-    pub fn expiration_date(&self) -> Option<DateTime<Utc>> {
+    pub fn expiration_date(&self) -> Option<NaiveDate> {
         self.expiration_date
     }
 
