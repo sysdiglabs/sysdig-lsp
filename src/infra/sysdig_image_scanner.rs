@@ -6,11 +6,14 @@ use serde::Deserialize;
 use thiserror::Error;
 use tokio::{process::Command, sync::Mutex};
 
-use crate::app::{ImageScanError, ImageScanResult, ImageScanner};
+use crate::{
+    app::{ImageScanError, ImageScanner},
+    domain::scanresult::scan_result::ScanResult,
+};
 
 use super::{
     scanner_binary_manager::{ScannerBinaryManager, ScannerBinaryManagerError},
-    sysdig_image_scanner_result::SysdigImageScannerReport,
+    sysdig_image_scanner_json_scan_result_v1::JsonScanResultV1,
 };
 
 #[derive(Clone)]
@@ -71,7 +74,7 @@ impl SysdigImageScanner {
     async fn scan(
         &self,
         image_pull_string: &str,
-    ) -> Result<SysdigImageScannerReport, SysdigImageScannerError> {
+    ) -> Result<JsonScanResultV1, SysdigImageScannerError> {
         let path_to_cli = self
             .scanner_binary_manager
             .lock()
@@ -113,64 +116,91 @@ impl SysdigImageScanner {
             _ => {}
         };
 
-        let report: SysdigImageScannerReport = serde_json::from_slice(&output.stdout)?;
-
-        Ok(report)
+        deserialize_with_debug(&output.stdout)
     }
 }
 
 #[async_trait::async_trait]
 impl ImageScanner for SysdigImageScanner {
-    async fn scan_image(&self, image_pull_string: &str) -> Result<ImageScanResult, ImageScanError> {
-        Ok(self.scan(image_pull_string).await?.into())
+    async fn scan_image(&self, image_pull_string: &str) -> Result<ScanResult, ImageScanError> {
+        let scan = self.scan(image_pull_string).await?;
+        Ok(ScanResult::from(scan))
     }
 }
 
+fn deserialize_with_debug(json_bytes: &[u8]) -> Result<JsonScanResultV1, SysdigImageScannerError> {
+    let output_json = String::from_utf8_lossy(json_bytes);
+    serde_json::from_str(&output_json).map_err(|e| {
+        tracing::error!(
+            "Failed to deserialize scanner output. Raw JSON: {}",
+            output_json
+        );
+        SysdigImageScannerError::ReportDeserialization(e)
+    })
+}
+
 #[cfg(test)]
-#[serial_test::file_serial]
 mod tests {
-    use lazy_static::lazy_static;
+    use super::*;
+    use crate::infra::sysdig_image_scanner;
+    use rstest::*;
+    use tracing_test::traced_test;
 
-    use crate::app::{ImageScanner, VulnSeverity};
+    #[test]
+    #[traced_test]
+    fn it_logs_invalid_json_on_deserialization_error() {
+        let invalid_json = b"{\"foo\": \"bar\"}";
 
-    use super::{SysdigAPIToken, SysdigImageScanner};
+        let result = sysdig_image_scanner::deserialize_with_debug(invalid_json);
+        assert!(result.is_err());
+        assert!(logs_contain(
+            "Failed to deserialize scanner output. Raw JSON: {\"foo\": \"bar\"}"
+        ));
+    }
 
-    lazy_static! {
-        static ref SYSDIG_SECURE_URL: String =
+    #[fixture]
+    fn scanner() -> SysdigImageScanner {
+        let sysdig_secure_url: String =
             std::env::var("SECURE_API_URL").expect("SECURE_API_URL env var not set");
-        static ref SYSDIG_SECURE_TOKEN: SysdigAPIToken =
+        let sysdig_secure_token: SysdigAPIToken =
             SysdigAPIToken(std::env::var("SECURE_API_TOKEN").expect("SECURE_API_TOKEN not set"));
+        SysdigImageScanner::new(sysdig_secure_url.clone(), sysdig_secure_token.clone())
     }
 
+    #[rstest]
+    #[case("ubuntu:22.04")]
+    #[case("ubuntu@sha256:a76d0e9d99f0e91640e35824a6259c93156f0f07b7778ba05808c750e7fa6e68")]
+    #[case("debian:11")]
+    #[case("alpine:3.16")]
+    #[case("centos:7")]
+    #[case("nginx:1.23")]
+    #[case("postgres:14")]
+    #[case("mysql:8.0")]
+    #[case("node:18")]
+    #[case("python:3.13")]
+    #[case("golang:1.25")]
+    #[case("rust:1.88")]
+    #[case("quay.io/prometheus/prometheus:v2.40.1")]
+    #[case("registry.access.redhat.com/ubi8/ubi:latest")]
+    #[case("gcr.io/distroless/static-debian12")]
+    #[case("gcr.io/distroless/base-debian12")]
+    #[case("amazonlinux:2")]
+    #[case("mongo:5.0")]
+    #[case("quay.io/sysdig/agent-slim:latest")]
+    #[case("openjdk:11-jre-slim")]
+    #[case("quay.io/sysdig/sysdig-ubi9:1")]
+    #[serial_test::file_serial(scanner)]
     #[tokio::test]
-    async fn it_retrieves_the_scanner_from_the_specified_version() {
-        let scanner =
-            SysdigImageScanner::new(SYSDIG_SECURE_URL.clone(), SYSDIG_SECURE_TOKEN.clone());
+    async fn it_scans_popular_images_correctly_test(
+        scanner: SysdigImageScanner,
+        #[case] image_to_scan: &str,
+    ) {
+        use crate::app::ImageScanner;
 
-        let report = scanner.scan("ubuntu:22.04").await.unwrap();
+        let report = scanner.scan_image(image_to_scan).await.unwrap();
 
-        assert!(report.info.is_some());
-        assert!(report.scanner.is_some());
-        assert!(report.result.is_some());
-    }
-
-    #[tokio::test]
-    async fn it_scans_the_ubuntu_image_correctly() {
-        let scanner =
-            SysdigImageScanner::new(SYSDIG_SECURE_URL.clone(), SYSDIG_SECURE_TOKEN.clone());
-
-        let report = scanner
-            .scan_image(
-                "ubuntu@sha256:a76d0e9d99f0e91640e35824a6259c93156f0f07b7778ba05808c750e7fa6e68",
-            )
-            .await
-            .unwrap();
-
-        assert!(report.count_vulns_of_severity(VulnSeverity::Critical) == 0);
-        assert!(report.count_vulns_of_severity(VulnSeverity::High) == 0);
-        assert!(report.count_vulns_of_severity(VulnSeverity::Medium) > 0);
-        assert!(report.count_vulns_of_severity(VulnSeverity::Low) > 0);
-        assert!(report.count_vulns_of_severity(VulnSeverity::Negligible) > 0);
-        assert!(!report.is_compliant);
+        assert_eq!(report.metadata().pull_string(), image_to_scan);
+        assert!(!report.packages().is_empty());
+        assert!(!report.layers().is_empty());
     }
 }

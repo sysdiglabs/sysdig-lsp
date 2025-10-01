@@ -40,17 +40,19 @@
             mkShell {
               packages = [
                 cargo
-                rustc
-                rustfmt
                 cargo-audit
-                cargo-watch
-                cargo-nextest
                 cargo-expand
+                cargo-machete
+                cargo-nextest
+                cargo-tarpaulin
+                cargo-watch
                 clippy
                 just
-                rust-analyzer
                 lldb
                 pre-commit
+                rust-analyzer
+                rustc
+                rustfmt
               ];
 
               inputsFrom = [ sysdig-lsp ];

@@ -1,65 +1,13 @@
 use std::error::Error;
 
 use thiserror::Error;
+use tracing::info;
+
+use crate::domain::scanresult::scan_result::ScanResult;
 
 #[async_trait::async_trait]
 pub trait ImageScanner {
-    async fn scan_image(&self, image_pull_string: &str) -> Result<ImageScanResult, ImageScanError>;
-}
-
-#[derive(Clone, Debug)]
-pub struct ImageScanResult {
-    pub vulnerabilities: Vec<VulnerabilityEntry>,
-    pub is_compliant: bool,
-    pub layers: Vec<LayerScanResult>,
-}
-
-impl ImageScanResult {
-    pub fn count_vulns_of_severity(&self, severity: VulnSeverity) -> usize {
-        self.vulnerabilities
-            .iter()
-            .filter(|v| v.severity == severity)
-            .count()
-    }
-
-    pub fn has_vulnerabilities(&self) -> bool {
-        !self.vulnerabilities.is_empty()
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct VulnerabilityEntry {
-    pub id: String,
-    pub severity: VulnSeverity,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum VulnSeverity {
-    Critical,
-    High,
-    Medium,
-    Low,
-    Negligible,
-}
-
-#[derive(Clone, Debug)]
-pub struct LayerScanResult {
-    pub layer_instruction: String,
-    pub layer_text: String,
-    pub vulnerabilities: Vec<VulnerabilityEntry>,
-}
-
-impl LayerScanResult {
-    pub fn count_vulns_of_severity(&self, severity: VulnSeverity) -> usize {
-        self.vulnerabilities
-            .iter()
-            .filter(|v| v.severity == severity)
-            .count()
-    }
-
-    pub fn has_vulnerabilities(&self) -> bool {
-        !self.vulnerabilities.is_empty()
-    }
+    async fn scan_image(&self, image_pull_string: &str) -> Result<ScanResult, ImageScanError>;
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -69,6 +17,28 @@ pub struct Vulnerabilities {
     pub medium: usize,
     pub low: usize,
     pub negligible: usize,
+}
+
+impl From<ScanResult> for Vulnerabilities {
+    fn from(value: ScanResult) -> Self {
+        value
+            .vulnerabilities()
+            .into_iter()
+            .fold(Self::default(), |mut acc, v| {
+                use crate::domain::scanresult::severity::Severity;
+                match v.severity() {
+                    Severity::Critical => acc.critical += 1,
+                    Severity::High => acc.high += 1,
+                    Severity::Medium => acc.medium += 1,
+                    Severity::Low => acc.low += 1,
+                    Severity::Negligible => acc.negligible += 1,
+                    Severity::Unknown => {
+                        info!("unknown severity {:?}", v)
+                    }
+                }
+                acc
+            })
+    }
 }
 
 #[derive(Error, Debug)]
