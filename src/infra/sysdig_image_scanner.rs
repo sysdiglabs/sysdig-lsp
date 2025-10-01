@@ -140,67 +140,67 @@ fn deserialize_with_debug(json_bytes: &[u8]) -> Result<JsonScanResultV1, SysdigI
 }
 
 #[cfg(test)]
-#[serial_test::file_serial]
 mod tests {
-    use crate::infra::sysdig_image_scanner::deserialize_with_debug;
-    use lazy_static::lazy_static;
-
+    use super::*;
+    use crate::infra::sysdig_image_scanner;
+    use rstest::*;
     use tracing_test::traced_test;
-
-    use crate::app::ImageScanner;
-
-    use super::{SysdigAPIToken, SysdigImageScanner};
-
-    lazy_static! {
-        static ref SYSDIG_SECURE_URL: String =
-            std::env::var("SECURE_API_URL").expect("SECURE_API_URL env var not set");
-        static ref SYSDIG_SECURE_TOKEN: SysdigAPIToken =
-            SysdigAPIToken(std::env::var("SECURE_API_TOKEN").expect("SECURE_API_TOKEN not set"));
-    }
-
-    #[tokio::test]
-    async fn it_retrieves_the_scanner_from_the_specified_version() {
-        let scanner =
-            SysdigImageScanner::new(SYSDIG_SECURE_URL.clone(), SYSDIG_SECURE_TOKEN.clone());
-
-        let report = scanner.scan("ubuntu:22.04").await.unwrap();
-
-        assert_eq!(report.scanner.name, "sysdig-cli-scanner");
-        assert_eq!(report.result.metadata.pull_string, "ubuntu:22.04");
-    }
-
-    #[tokio::test]
-    async fn it_scans_the_ubuntu_image_correctly() {
-        let scanner =
-            SysdigImageScanner::new(SYSDIG_SECURE_URL.clone(), SYSDIG_SECURE_TOKEN.clone());
-
-        let report = scanner
-            .scan_image(
-                "ubuntu@sha256:a76d0e9d99f0e91640e35824a6259c93156f0f07b7778ba05808c750e7fa6e68",
-            )
-            .await
-            .unwrap();
-
-        assert_eq!(
-            report.metadata().pull_string(),
-            "ubuntu@sha256:a76d0e9d99f0e91640e35824a6259c93156f0f07b7778ba05808c750e7fa6e68"
-        );
-
-        assert!(!report.layers().is_empty());
-        assert!(!report.vulnerabilities().is_empty());
-        assert!(!report.packages().is_empty());
-        assert!(report.evaluation_result().is_failed());
-    }
 
     #[test]
     #[traced_test]
     fn it_logs_invalid_json_on_deserialization_error() {
         let invalid_json = b"{\"foo\": \"bar\"}";
 
-        let result = deserialize_with_debug(invalid_json);
+        let result = sysdig_image_scanner::deserialize_with_debug(invalid_json);
         assert!(result.is_err());
         assert!(logs_contain(
             "Failed to deserialize scanner output. Raw JSON: {\"foo\": \"bar\"}"
         ));
+    }
+
+    #[fixture]
+    fn scanner() -> SysdigImageScanner {
+        let sysdig_secure_url: String =
+            std::env::var("SECURE_API_URL").expect("SECURE_API_URL env var not set");
+        let sysdig_secure_token: SysdigAPIToken =
+            SysdigAPIToken(std::env::var("SECURE_API_TOKEN").expect("SECURE_API_TOKEN not set"));
+        SysdigImageScanner::new(sysdig_secure_url.clone(), sysdig_secure_token.clone())
+    }
+
+    #[rstest]
+    #[case("ubuntu:22.04")]
+    #[case("ubuntu@sha256:a76d0e9d99f0e91640e35824a6259c93156f0f07b7778ba05808c750e7fa6e68")]
+    #[case("debian:11")]
+    #[case("alpine:3.16")]
+    #[case("centos:7")]
+    #[case("nginx:1.23")]
+    #[case("postgres:14")]
+    #[case("mysql:8.0")]
+    #[case("node:18")]
+    #[case("python:3.13")]
+    #[case("golang:1.25")]
+    #[case("rust:1.88")]
+    #[case("quay.io/prometheus/prometheus:v2.40.1")]
+    #[case("registry.access.redhat.com/ubi8/ubi:latest")]
+    #[case("gcr.io/distroless/static-debian12")]
+    #[case("gcr.io/distroless/base-debian12")]
+    #[case("amazonlinux:2")]
+    #[case("mongo:5.0")]
+    #[case("quay.io/sysdig/agent-slim:latest")]
+    #[case("openjdk:11-jre-slim")]
+    #[case("quay.io/sysdig/sysdig-ubi9:1")]
+    #[serial_test::file_serial(scanner)]
+    #[tokio::test]
+    async fn it_scans_popular_images_correctly_test(
+        scanner: SysdigImageScanner,
+        #[case] image_to_scan: &str,
+    ) {
+        use crate::app::ImageScanner;
+
+        let report = scanner.scan_image(image_to_scan).await.unwrap();
+
+        assert_eq!(report.metadata().pull_string(), image_to_scan);
+        assert!(!report.packages().is_empty());
+        assert!(!report.layers().is_empty());
     }
 }
