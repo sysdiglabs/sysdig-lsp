@@ -2,7 +2,7 @@ use std::borrow::Cow;
 use std::path::PathBuf;
 use std::str::FromStr;
 
-use serde_json::{Value, json};
+use serde_json::Value;
 use tokio::sync::RwLock;
 use tower_lsp::LanguageServer;
 use tower_lsp::jsonrpc::{Error, ErrorCode, Result};
@@ -10,8 +10,8 @@ use tower_lsp::lsp_types::{
     CodeActionOrCommand, CodeActionParams, CodeActionProviderCapability, CodeActionResponse,
     CodeLens, CodeLensOptions, CodeLensParams, Command, DidChangeConfigurationParams,
     DidChangeTextDocumentParams, DidOpenTextDocumentParams, ExecuteCommandOptions,
-    ExecuteCommandParams, InitializeParams, InitializeResult, InitializedParams, MessageType,
-    Range, ServerCapabilities, TextDocumentSyncCapability, TextDocumentSyncKind,
+    ExecuteCommandParams, InitializeParams, InitializeResult, InitializedParams, Location,
+    MessageType, Range, ServerCapabilities, TextDocumentSyncCapability, TextDocumentSyncKind,
 };
 use tracing::{debug, info};
 
@@ -20,6 +20,9 @@ use super::component_factory::{ComponentFactory, Config};
 use super::queries::QueryExecutor;
 use super::{InMemoryDocumentDatabase, LSPClient};
 use crate::infra::{parse_compose_file, parse_dockerfile};
+
+mod supported_commands;
+use supported_commands::SupportedCommands;
 
 pub struct LSPServer<C> {
     command_executor: CommandExecutor<C>,
@@ -58,32 +61,6 @@ where
     }
 }
 
-pub enum SupportedCommands {
-    ExecuteBaseImageScan,
-    ExecuteBuildAndScan,
-}
-
-impl std::fmt::Display for SupportedCommands {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(match self {
-            Self::ExecuteBaseImageScan => "sysdig-lsp.execute-scan",
-            Self::ExecuteBuildAndScan => "sysdig-lsp.execute-build-and-scan",
-        })
-    }
-}
-
-impl TryFrom<&str> for SupportedCommands {
-    type Error = String;
-
-    fn try_from(value: &str) -> std::result::Result<Self, Self::Error> {
-        match value {
-            "sysdig-lsp.execute-scan" => Ok(SupportedCommands::ExecuteBaseImageScan),
-            "sysdig-lsp.execute-build-and-scan" => Ok(SupportedCommands::ExecuteBuildAndScan),
-            _ => Err(format!("command not supported: {value}")),
-        }
-    }
-}
-
 struct CommandInfo {
     title: String,
     command: String,
@@ -115,22 +92,19 @@ where
 
     fn generate_compose_commands(
         &self,
-        uri: &tower_lsp::lsp_types::Url,
+        url: &tower_lsp::lsp_types::Url,
         content: &str,
     ) -> Vec<CommandInfo> {
         let mut commands = vec![];
         if let Ok(instructions) = parse_compose_file(content) {
             for instruction in instructions {
-                commands.push(CommandInfo {
-                    title: "Scan base image".to_string(),
-                    command: SupportedCommands::ExecuteBaseImageScan.to_string(),
-                    arguments: Some(vec![
-                        json!(uri),
-                        json!(instruction.range),
-                        json!(instruction.image_name),
-                    ]),
-                    range: instruction.range,
-                });
+                commands.push(
+                    SupportedCommands::ExecuteBaseImageScan {
+                        location: Location::new(url.clone(), instruction.range),
+                        image: instruction.image_name,
+                    }
+                    .into(),
+                );
             }
         }
         commands
@@ -149,21 +123,20 @@ where
             .next_back()
         {
             let range = last_from_instruction.range;
-            let line = last_from_instruction.range.start.line;
-            commands.push(CommandInfo {
-                title: "Build and scan".to_string(),
-                command: SupportedCommands::ExecuteBuildAndScan.to_string(),
-                arguments: Some(vec![json!(uri), json!(line)]),
-                range,
-            });
-
-            if let Some(image_name) = last_from_instruction.arguments.first() {
-                commands.push(CommandInfo {
-                    title: "Scan base image".to_string(),
-                    command: SupportedCommands::ExecuteBaseImageScan.to_string(),
-                    arguments: Some(vec![json!(uri), json!(range), json!(image_name)]),
-                    range,
-                });
+            commands.push(
+                SupportedCommands::ExecuteBuildAndScan {
+                    location: Location::new(uri.clone(), range),
+                }
+                .into(),
+            );
+            if let Some(image) = last_from_instruction.arguments.first() {
+                commands.push(
+                    SupportedCommands::ExecuteBaseImageScan {
+                        location: Location::new(uri.clone(), range),
+                        image: image.to_owned(),
+                    }
+                    .into(),
+                );
             }
         }
         commands
@@ -196,10 +169,7 @@ where
                     resolve_provider: Some(false),
                 }),
                 execute_command_provider: Some(ExecuteCommandOptions {
-                    commands: vec![
-                        SupportedCommands::ExecuteBaseImageScan.to_string(),
-                        SupportedCommands::ExecuteBuildAndScan.to_string(),
-                    ],
+                    commands: SupportedCommands::all_supported_commands_as_string(),
                     ..Default::default()
                 }),
                 ..Default::default()
@@ -296,20 +266,25 @@ where
     }
 
     async fn execute_command(&self, params: ExecuteCommandParams) -> Result<Option<Value>> {
-        let command: SupportedCommands = params.command.as_str().try_into().map_err(|e| {
-            Error::internal_error().with_message(format!("unable to parse command: {e}"))
-        })?;
+        let command: SupportedCommands = params.try_into()?;
 
-        let result = match command {
-            SupportedCommands::ExecuteBaseImageScan => {
-                execute_command_scan_base_image(self, &params)
+        let result = match command.clone() {
+            SupportedCommands::ExecuteBaseImageScan { location, image } => {
+                execute_command_scan_base_image(
+                    self,
+                    location.uri.to_string(),
+                    location.range,
+                    image,
+                )
+                .await
+                .map(|_| None)
+            }
+
+            SupportedCommands::ExecuteBuildAndScan { location } => {
+                execute_command_build_and_scan(self, location.uri.to_string(), location.range)
                     .await
                     .map(|_| None)
             }
-
-            SupportedCommands::ExecuteBuildAndScan => execute_command_build_and_scan(self, &params)
-                .await
-                .map(|_| None),
         };
 
         match result {
@@ -331,32 +306,10 @@ where
 
 async fn execute_command_scan_base_image<C: LSPClient>(
     server: &LSPServer<C>,
-    params: &ExecuteCommandParams,
+    file: String,
+    range: Range,
+    image: String,
 ) -> Result<()> {
-    let Some(uri) = params.arguments.first() else {
-        return Err(Error::internal_error().with_message("no uri was provided"));
-    };
-
-    let Some(uri) = uri.as_str() else {
-        return Err(Error::internal_error().with_message("uri is not a string"));
-    };
-
-    let Some(range) = params.arguments.get(1) else {
-        return Err(Error::internal_error().with_message("no range was provided"));
-    };
-
-    let Ok(range) = serde_json::from_value::<Range>(range.clone()) else {
-        return Err(Error::internal_error().with_message("range is not a Range object"));
-    };
-
-    let Some(image_name) = params.arguments.get(2) else {
-        return Err(Error::internal_error().with_message("no image name was provided"));
-    };
-
-    let Some(image_name) = image_name.as_str() else {
-        return Err(Error::internal_error().with_message("image name is not a string"));
-    };
-
     let image_scanner = {
         let mut lock = server.component_factory.write().await;
         lock.image_scanner().map_err(|e| {
@@ -366,7 +319,7 @@ async fn execute_command_scan_base_image<C: LSPClient>(
 
     server
         .command_executor
-        .scan_image(uri, range, image_name, &image_scanner)
+        .scan_image(&file, range, &image, &image_scanner)
         .await?;
 
     Ok(())
@@ -374,24 +327,9 @@ async fn execute_command_scan_base_image<C: LSPClient>(
 
 async fn execute_command_build_and_scan<C: LSPClient>(
     server: &LSPServer<C>,
-    params: &ExecuteCommandParams,
+    file: String,
+    range: Range,
 ) -> Result<()> {
-    let Some(uri) = params.arguments.first() else {
-        return Err(Error::internal_error().with_message("no uri was provided"));
-    };
-
-    let Some(uri) = uri.as_str() else {
-        return Err(Error::internal_error().with_message("uri is not a string"));
-    };
-
-    let Some(line) = params.arguments.get(1) else {
-        return Err(Error::internal_error().with_message("no line was provided"));
-    };
-
-    let Some(line) = line.as_u64().and_then(|x| u32::try_from(x).ok()) else {
-        return Err(Error::internal_error().with_message("line is not a u32"));
-    };
-
     let (image_scanner, image_builder) = {
         let mut factory = server.component_factory.write().await;
 
@@ -408,8 +346,8 @@ async fn execute_command_build_and_scan<C: LSPClient>(
     server
         .command_executor
         .build_and_scan_from_file(
-            &PathBuf::from_str(uri).unwrap(),
-            line,
+            &PathBuf::from_str(&file).unwrap(),
+            range.start.line,
             &image_builder,
             &image_scanner,
         )
