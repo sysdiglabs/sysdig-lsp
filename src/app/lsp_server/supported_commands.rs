@@ -1,7 +1,5 @@
 use std::fmt::Display;
 
-use super::CommandInfo;
-use serde_json::json;
 use tower_lsp::{
     jsonrpc::{self, Error},
     lsp_types::{ExecuteCommandParams, Location},
@@ -17,7 +15,7 @@ pub enum SupportedCommands {
 }
 
 impl SupportedCommands {
-    fn as_string_command(&self) -> String {
+    pub fn as_string_command(&self) -> String {
         match self {
             SupportedCommands::ExecuteBaseImageScan { .. } => CMD_EXECUTE_SCAN,
             SupportedCommands::ExecuteBuildAndScan { .. } => CMD_BUILD_AND_SCAN,
@@ -30,26 +28,6 @@ impl SupportedCommands {
             .into_iter()
             .map(|s| s.to_string())
             .collect()
-    }
-}
-
-impl From<SupportedCommands> for CommandInfo {
-    fn from(value: SupportedCommands) -> Self {
-        match &value {
-            SupportedCommands::ExecuteBaseImageScan { location, image } => CommandInfo {
-                title: "Scan base image".to_owned(),
-                command: value.as_string_command(),
-                arguments: Some(vec![json!(location), json!(image)]),
-                range: location.range,
-            },
-
-            SupportedCommands::ExecuteBuildAndScan { location } => CommandInfo {
-                title: "Build and scan".to_owned(),
-                command: value.as_string_command(),
-                arguments: Some(vec![json!(location)]),
-                range: location.range,
-            },
-        }
     }
 }
 
