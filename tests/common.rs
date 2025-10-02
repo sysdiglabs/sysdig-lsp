@@ -27,6 +27,12 @@ impl TestClientRecorder {
     }
 }
 
+impl Default for TestClientRecorder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[async_trait::async_trait]
 impl sysdig_lsp::app::LSPClient for TestClientRecorder {
     async fn show_message<M: std::fmt::Display + Send>(
@@ -125,5 +131,11 @@ impl TestSetup {
             client_recorder,
             component_factory,
         }
+    }
+}
+
+impl Default for TestSetup {
+    fn default() -> Self {
+        Self::new()
     }
 }
