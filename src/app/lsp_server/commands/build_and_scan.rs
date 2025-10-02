@@ -1,123 +1,18 @@
-use tower_lsp::jsonrpc::Result;
-
-#[async_trait::async_trait]
-pub trait LspCommand {
-    async fn execute(&mut self) -> Result<()>;
-}
+use std::{path::PathBuf, str::FromStr, sync::Arc};
 
 use itertools::Itertools;
-use tower_lsp::lsp_types::{Diagnostic, DiagnosticSeverity, Location, MessageType};
-
-use crate::{
-    app::{ImageScanner, LSPClient, LspInteractor},
-    domain::scanresult::{scan_result::ScanResult, severity::Severity},
+use tower_lsp::jsonrpc::Result;
+use tower_lsp::lsp_types::{
+    Diagnostic, DiagnosticSeverity, Location, MessageType, Position, Range,
 };
 
-use super::WithContext;
+use crate::{
+    app::{ImageBuilder, ImageScanner, LSPClient, LspInteractor, lsp_server::WithContext},
+    domain::scanresult::{layer::Layer, scan_result::ScanResult, severity::Severity},
+    infra::parse_dockerfile,
+};
 
-pub struct ScanBaseImageCommand<'a, C, S>
-where
-    S: ImageScanner,
-{
-    image_scanner: &'a S,
-    interactor: &'a LspInteractor<C>,
-    location: Location,
-    image: String,
-}
-
-impl<'a, C, S> ScanBaseImageCommand<'a, C, S>
-where
-    S: ImageScanner,
-{
-    pub fn new(
-        image_scanner: &'a S,
-        interactor: &'a LspInteractor<C>,
-        location: Location,
-        image: String,
-    ) -> Self {
-        Self {
-            image_scanner,
-            interactor,
-            location,
-            image,
-        }
-    }
-}
-
-#[async_trait::async_trait]
-impl<'a, C, S> LspCommand for ScanBaseImageCommand<'a, C, S>
-where
-    C: LSPClient + Sync,
-    S: ImageScanner + Sync,
-{
-    async fn execute(&mut self) -> tower_lsp::jsonrpc::Result<()> {
-        let image_name = &self.image;
-        self.interactor
-            .show_message(
-                MessageType::INFO,
-                format!("Starting scan of {image_name}...").as_str(),
-            )
-            .await;
-
-        let scan_result = self
-            .image_scanner
-            .scan_image(image_name)
-            .await
-            .map_err(|e| tower_lsp::jsonrpc::Error::internal_error().with_message(e.to_string()))?;
-
-        self.interactor
-            .show_message(
-                MessageType::INFO,
-                format!("Finished scan of {image_name}.").as_str(),
-            )
-            .await;
-
-        let diagnostic = {
-            let mut diagnostic = Diagnostic {
-                range: self.location.range,
-                severity: Some(DiagnosticSeverity::HINT),
-                message: "No vulnerabilities found.".to_owned(),
-                ..Default::default()
-            };
-
-            if !scan_result.vulnerabilities().is_empty() {
-                let vulns = scan_result
-                    .vulnerabilities()
-                    .iter()
-                    .counts_by(|v| v.severity());
-                diagnostic.message = format!(
-                    "Vulnerabilities found for {}: {} Critical, {} High, {} Medium, {} Low, {} Negligible",
-                    image_name,
-                    vulns.get(&Severity::Critical).unwrap_or(&0_usize),
-                    vulns.get(&Severity::High).unwrap_or(&0_usize),
-                    vulns.get(&Severity::Medium).unwrap_or(&0_usize),
-                    vulns.get(&Severity::Low).unwrap_or(&0_usize),
-                    vulns.get(&Severity::Negligible).unwrap_or(&0_usize),
-                );
-
-                diagnostic.severity = Some(if scan_result.evaluation_result().is_passed() {
-                    DiagnosticSeverity::INFORMATION
-                } else {
-                    DiagnosticSeverity::ERROR
-                });
-            }
-
-            diagnostic
-        };
-
-        let uri = self.location.uri.as_str();
-        self.interactor.remove_diagnostics(uri).await;
-        self.interactor
-            .append_document_diagnostics(uri, &[diagnostic])
-            .await;
-        self.interactor.publish_all_diagnostics().await
-    }
-}
-
-use std::{path::PathBuf, str::FromStr, sync::Arc};
-use tower_lsp::lsp_types::{Position, Range};
-
-use crate::{app::ImageBuilder, domain::scanresult::layer::Layer, infra::parse_dockerfile};
+use super::LspCommand;
 
 pub struct BuildAndScanCommand<'a, C, B, S>
 where

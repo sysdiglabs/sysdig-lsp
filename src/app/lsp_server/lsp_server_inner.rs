@@ -13,7 +13,9 @@ use super::super::LspInteractor;
 use super::super::component_factory::{ComponentFactory, Config};
 use super::super::queries::QueryExecutor;
 use super::command_generator;
-use super::commands::{BuildAndScanCommand, LspCommand, ScanBaseImageCommand};
+use super::commands::{
+    LspCommand, build_and_scan::BuildAndScanCommand, scan_base_image::ScanBaseImageCommand,
+};
 use super::{InMemoryDocumentDatabase, LSPClient, WithContext};
 
 use super::supported_commands::SupportedCommands;
