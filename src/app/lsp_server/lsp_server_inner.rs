@@ -9,40 +9,42 @@ use tower_lsp::lsp_types::{
 };
 use tracing::{debug, info};
 
-use super::super::LspInteractor;
-use super::super::component_factory::{ComponentFactory, Config};
+use super::super::component_factory::{ComponentFactory, Components, Config};
 use super::super::queries::QueryExecutor;
 use super::command_generator;
 use super::commands::{
     LspCommand, build_and_scan::BuildAndScanCommand, scan_base_image::ScanBaseImageCommand,
 };
 use super::{InMemoryDocumentDatabase, LSPClient, WithContext};
+use crate::app::LspInteractor;
 
 use super::supported_commands::SupportedCommands;
 
-pub struct LSPServerInner<C> {
+pub struct LSPServerInner<C, F: ComponentFactory> {
     interactor: LspInteractor<C>,
     query_executor: QueryExecutor,
-    component_factory: Option<ComponentFactory>,
+    component_factory: F,
+    components: Option<Components>,
 }
 
-impl<C> LSPServerInner<C> {
-    pub fn new(client: C) -> LSPServerInner<C> {
+impl<C, F: ComponentFactory> LSPServerInner<C, F> {
+    pub fn new(client: C, component_factory: F) -> LSPServerInner<C, F> {
         let document_database = InMemoryDocumentDatabase::default();
 
         LSPServerInner {
             interactor: LspInteractor::new(client, document_database.clone()),
             query_executor: QueryExecutor::new(document_database.clone()),
-            component_factory: None, // to be initialized in the initialize method of the LSP
+            component_factory,
+            components: None,
         }
     }
 }
 
-impl<C> LSPServerInner<C>
+impl<C, F: ComponentFactory> LSPServerInner<C, F>
 where
     C: LSPClient + Send + Sync + 'static,
 {
-    fn update_component_factory(&mut self, config: &Value) -> Result<()> {
+    fn update_components(&mut self, config: &Value) -> Result<()> {
         let config = serde_json::from_value::<Config>(config.clone()).map_err(|e| {
             Error::internal_error()
                 .with_message(format!("unable to transform json into config: {e}"))
@@ -50,15 +52,15 @@ where
 
         debug!("updating with configuration: {config:?}");
 
-        let factory = ComponentFactory::new(config)?;
-        self.component_factory.replace(factory);
+        let components = self.component_factory.create_components(config)?;
+        self.components.replace(components);
 
         debug!("updated configuration");
         Ok(())
     }
 }
 
-impl<C> LSPServerInner<C>
+impl<C, F: ComponentFactory> LSPServerInner<C, F>
 where
     C: LSPClient + Send + Sync + 'static,
 {
@@ -88,7 +90,7 @@ where
             });
         };
 
-        self.update_component_factory(&config)?;
+        self.update_components(&config)?;
 
         Ok(InitializeResult {
             capabilities: ServerCapabilities {
@@ -117,7 +119,7 @@ where
     }
 
     pub async fn did_change_configuration(&mut self, params: DidChangeConfigurationParams) {
-        let _ = self.update_component_factory(&params.settings);
+        let _ = self.update_components(&params.settings);
     }
 
     pub async fn did_open(&self, params: DidOpenTextDocumentParams) {
@@ -162,31 +164,38 @@ where
         Ok(Some(code_lenses))
     }
 
+    fn components(&self) -> Result<&Components> {
+        self.components
+            .as_ref()
+            .ok_or_else(|| Error::internal_error().with_message("LSP not initialized"))
+    }
+
     async fn execute_base_image_scan(
         &self,
         location: tower_lsp::lsp_types::Location,
         image: String,
     ) -> Result<()> {
-        let factory = self
-            .component_factory
-            .as_ref()
-            .ok_or_else(|| Error::internal_error().with_message("LSP not initialized"))?;
-        let image_scanner = factory.image_scanner();
-        ScanBaseImageCommand::new(image_scanner, &self.interactor, location, image)
-            .execute()
-            .await
+        let components = self.components()?;
+        ScanBaseImageCommand::new(
+            components.scanner.as_ref(),
+            &self.interactor,
+            location,
+            image,
+        )
+        .execute()
+        .await
     }
 
     async fn execute_build_and_scan(&self, location: tower_lsp::lsp_types::Location) -> Result<()> {
-        let factory = self
-            .component_factory
-            .as_ref()
-            .ok_or_else(|| Error::internal_error().with_message("LSP not initialized"))?;
-        let image_scanner = factory.image_scanner();
-        let image_builder = factory.image_builder();
-        BuildAndScanCommand::new(image_builder, image_scanner, &self.interactor, location)
-            .execute()
-            .await
+        let components = self.components()?;
+        BuildAndScanCommand::new(
+            components.builder.as_ref(),
+            components.scanner.as_ref(),
+            &self.interactor,
+            location,
+        )
+        .execute()
+        .await
     }
 
     async fn handle_command_error(&self, command_name: &str, e: Error) -> Error {

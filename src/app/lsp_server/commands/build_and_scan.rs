@@ -14,7 +14,7 @@ use crate::{
 
 use super::LspCommand;
 
-pub struct BuildAndScanCommand<'a, C, B, S>
+pub struct BuildAndScanCommand<'a, C, B: ?Sized, S: ?Sized>
 where
     B: ImageBuilder,
     S: ImageScanner,
@@ -25,7 +25,7 @@ where
     location: Location,
 }
 
-impl<'a, C, B, S> BuildAndScanCommand<'a, C, B, S>
+impl<'a, C, B: ?Sized, S: ?Sized> BuildAndScanCommand<'a, C, B, S>
 where
     B: ImageBuilder,
     S: ImageScanner,
@@ -46,7 +46,7 @@ where
 }
 
 #[async_trait::async_trait]
-impl<'a, C, B, S> LspCommand for BuildAndScanCommand<'a, C, B, S>
+impl<'a, C, B: ?Sized, S: ?Sized> LspCommand for BuildAndScanCommand<'a, C, B, S>
 where
     C: LSPClient + Sync,
     B: ImageBuilder + Sync,

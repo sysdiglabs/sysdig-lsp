@@ -8,7 +8,7 @@ use crate::{
 
 use super::LspCommand;
 
-pub struct ScanBaseImageCommand<'a, C, S>
+pub struct ScanBaseImageCommand<'a, C, S: ?Sized>
 where
     S: ImageScanner,
 {
@@ -18,7 +18,7 @@ where
     image: String,
 }
 
-impl<'a, C, S> ScanBaseImageCommand<'a, C, S>
+impl<'a, C, S: ?Sized> ScanBaseImageCommand<'a, C, S>
 where
     S: ImageScanner,
 {
@@ -38,7 +38,7 @@ where
 }
 
 #[async_trait::async_trait]
-impl<'a, C, S> LspCommand for ScanBaseImageCommand<'a, C, S>
+impl<'a, C, S: ?Sized> LspCommand for ScanBaseImageCommand<'a, C, S>
 where
     C: LSPClient + Sync,
     S: ImageScanner + Sync,

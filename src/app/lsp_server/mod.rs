@@ -15,6 +15,7 @@ pub mod command_generator;
 pub mod commands;
 mod lsp_server_inner;
 pub mod supported_commands;
+use crate::app::component_factory::ComponentFactory;
 use lsp_server_inner::LSPServerInner;
 
 pub trait WithContext {
@@ -28,14 +29,14 @@ impl WithContext for Error {
     }
 }
 
-pub struct LSPServer<C> {
-    inner: RwLock<LSPServerInner<C>>,
+pub struct LSPServer<C, F: ComponentFactory> {
+    inner: RwLock<LSPServerInner<C, F>>,
 }
 
-impl<C> LSPServer<C> {
-    pub fn new(client: C) -> LSPServer<C> {
+impl<C, F: ComponentFactory> LSPServer<C, F> {
+    pub fn new(client: C, component_factory: F) -> LSPServer<C, F> {
         LSPServer {
-            inner: RwLock::new(LSPServerInner::new(client)),
+            inner: RwLock::new(LSPServerInner::new(client, component_factory)),
         }
     }
 }
@@ -48,9 +49,10 @@ struct CommandInfo {
 }
 
 #[async_trait::async_trait]
-impl<C> LanguageServer for LSPServer<C>
+impl<C, F> LanguageServer for LSPServer<C, F>
 where
     C: LSPClient + Send + Sync + 'static,
+    F: ComponentFactory + Send + Sync + 'static,
 {
     async fn initialize(&self, params: InitializeParams) -> Result<InitializeResult> {
         self.inner.write().await.initialize(params).await

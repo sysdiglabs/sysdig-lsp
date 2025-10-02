@@ -1,27 +1,31 @@
 use std::env::VarError;
 
-use bollard::Docker;
 use serde::Deserialize;
 use thiserror::Error;
 use tower_lsp::jsonrpc::{Error as LspError, ErrorCode};
 
-use crate::infra::{DockerImageBuilder, SysdigAPIToken, SysdigImageScanner};
+use super::{ImageBuilder, ImageScanner};
 
 #[derive(Clone, Debug, Default, Deserialize)]
 pub struct Config {
-    sysdig: SysdigConfig,
+    pub sysdig: SysdigConfig,
 }
 
 #[derive(Clone, Debug, Default, Deserialize)]
 pub struct SysdigConfig {
-    api_url: String,
-    api_token: Option<SysdigAPIToken>,
+    #[serde(alias = "apiUrl")]
+    pub api_url: String,
+    #[serde(alias = "apiToken")]
+    pub api_token: Option<String>,
 }
 
-#[derive(Clone)]
-pub struct ComponentFactory {
-    scanner: SysdigImageScanner,
-    builder: DockerImageBuilder,
+pub struct Components {
+    pub scanner: Box<dyn ImageScanner + Send + Sync>,
+    pub builder: Box<dyn ImageBuilder + Send + Sync>,
+}
+
+pub trait ComponentFactory: Send + Sync {
+    fn create_components(&self, config: Config) -> Result<Components, ComponentFactoryError>;
 }
 
 #[derive(Error, Debug)]
@@ -30,33 +34,7 @@ pub enum ComponentFactoryError {
     UnableToRetrieveAPITokenFromEnvVar(#[from] VarError),
 
     #[error("docker client error: {0:?}")]
-    DockerClientError(#[from] bollard::errors::Error),
-}
-
-impl ComponentFactory {
-    pub fn new(config: Config) -> Result<Self, ComponentFactoryError> {
-        let token = config
-            .sysdig
-            .api_token
-            .clone()
-            .map(Ok)
-            .unwrap_or_else(|| std::env::var("SECURE_API_TOKEN").map(SysdigAPIToken))?;
-
-        let scanner = SysdigImageScanner::new(config.sysdig.api_url.clone(), token);
-
-        let docker_client = Docker::connect_with_local_defaults()?;
-        let builder = DockerImageBuilder::new(docker_client);
-
-        Ok(Self { scanner, builder })
-    }
-
-    pub fn image_scanner(&self) -> &SysdigImageScanner {
-        &self.scanner
-    }
-
-    pub fn image_builder(&self) -> &DockerImageBuilder {
-        &self.builder
-    }
+    DockerClientError(String),
 }
 
 impl From<ComponentFactoryError> for LspError {
@@ -76,16 +54,5 @@ impl From<ComponentFactoryError> for LspError {
             message: message.into(),
             data: None,
         }
-    }
-}
-
-#[cfg(test)]
-mod test {
-    use super::{ComponentFactory, Config};
-
-    #[test]
-    fn it_creates_a_factory() {
-        let factory = ComponentFactory::new(Config::default());
-        assert!(factory.is_ok());
     }
 }

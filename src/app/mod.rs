@@ -1,4 +1,4 @@
-mod component_factory;
+pub mod component_factory;
 mod document_database;
 mod image_builder;
 mod image_scanner;
