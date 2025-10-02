@@ -2,7 +2,7 @@ use serde_json::Value;
 use tower_lsp::jsonrpc::{Error, ErrorCode, Result};
 use tower_lsp::lsp_types::{
     CodeActionOrCommand, CodeActionParams, CodeActionProviderCapability, CodeActionResponse,
-    CodeLens, CodeLensOptions, CodeLensParams, Command, DidChangeConfigurationParams,
+    CodeLens, CodeLensOptions, CodeLensParams, DidChangeConfigurationParams,
     DidChangeTextDocumentParams, DidOpenTextDocumentParams, ExecuteCommandOptions,
     ExecuteCommandParams, InitializeParams, InitializeResult, InitializedParams, MessageType,
     ServerCapabilities, TextDocumentSyncCapability, TextDocumentSyncKind,
@@ -150,13 +150,7 @@ where
         let code_actions: Vec<CodeActionOrCommand> = commands
             .into_iter()
             .filter(|cmd| cmd.range.start.line == params.range.start.line)
-            .map(|cmd| {
-                CodeActionOrCommand::Command(Command {
-                    title: cmd.title,
-                    command: cmd.command,
-                    arguments: cmd.arguments,
-                })
-            })
+            .map(|cmd| CodeActionOrCommand::Command(cmd.into()))
             .collect();
 
         Ok(Some(code_actions))
@@ -166,18 +160,7 @@ where
         let commands = self
             .get_commands_for_document(&params.text_document.uri)
             .await?;
-        let code_lenses = commands
-            .into_iter()
-            .map(|cmd| CodeLens {
-                range: cmd.range,
-                command: Some(Command {
-                    title: cmd.title,
-                    command: cmd.command,
-                    arguments: cmd.arguments,
-                }),
-                data: None,
-            })
-            .collect();
+        let code_lenses = commands.into_iter().map(|cmd| cmd.into()).collect();
 
         Ok(Some(code_lenses))
     }

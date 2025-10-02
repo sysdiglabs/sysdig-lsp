@@ -1,5 +1,5 @@
 use serde_json::{Value, json};
-use tower_lsp::lsp_types::{Location, Range, Url};
+use tower_lsp::lsp_types::{CodeLens, Command, Location, Range, Url};
 
 use crate::app::lsp_server::supported_commands::SupportedCommands;
 use crate::infra::{parse_compose_file, parse_dockerfile};
@@ -27,6 +27,30 @@ impl From<SupportedCommands> for CommandInfo {
                 arguments: Some(vec![json!(location)]),
                 range: location.range,
             },
+        }
+    }
+}
+
+impl From<CommandInfo> for Command {
+    fn from(value: CommandInfo) -> Self {
+        Command {
+            title: value.title,
+            command: value.command,
+            arguments: value.arguments,
+        }
+    }
+}
+
+impl From<CommandInfo> for CodeLens {
+    fn from(value: CommandInfo) -> Self {
+        CodeLens {
+            range: value.range,
+            command: Some(Command {
+                title: value.title,
+                command: value.command,
+                arguments: value.arguments,
+            }),
+            data: None,
         }
     }
 }
