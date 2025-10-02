@@ -5,8 +5,8 @@ use tower_lsp::LanguageServer;
 use tower_lsp::jsonrpc::{Error, Result};
 use tower_lsp::lsp_types::{
     CodeActionParams, CodeActionResponse, CodeLens, CodeLensParams, DidChangeConfigurationParams,
-    DidChangeTextDocumentParams, DidOpenTextDocumentParams, ExecuteCommandParams, InitializeParams,
-    InitializeResult, InitializedParams, Range,
+    DidChangeTextDocumentParams, DidOpenTextDocumentParams, ExecuteCommandParams, Hover,
+    HoverParams, InitializeParams, InitializeResult, InitializedParams, Range,
 };
 
 use super::{InMemoryDocumentDatabase, LSPClient};
@@ -88,6 +88,38 @@ where
 
     async fn execute_command(&self, params: ExecuteCommandParams) -> Result<Option<Value>> {
         self.inner.read().await.execute_command(params).await
+    }
+
+    async fn hover(&self, _params: HoverParams) -> Result<Option<Hover>> {
+        Ok(Some(Hover {
+            contents: tower_lsp::lsp_types::HoverContents::Markup(
+                tower_lsp::lsp_types::MarkupContent {
+                    kind: tower_lsp::lsp_types::MarkupKind::Markdown,
+                    value: "# Sysdig Language Server
+---
+**_Sysdig Secure_** provides comprehensive security for your containers.
+
+### Features
+*   Vulnerability Scanning
+*   Runtime Security
+*   Compliance
+
+| Feature           | Status |
+| ----------------- | ------ |
+| Vulnerability Scan| ✅     |
+| Policy Advisor    | 🚧     |
+
+```rust
+fn main() {
+    println!(\"Hello, world!\");
+}
+```
+"
+                    .to_string(),
+                },
+            ),
+            range: None,
+        }))
     }
 
     async fn shutdown(&self) -> Result<()> {

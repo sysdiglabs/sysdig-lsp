@@ -4,8 +4,9 @@ use tower_lsp::lsp_types::{
     CodeActionOrCommand, CodeActionParams, CodeActionProviderCapability, CodeActionResponse,
     CodeLens, CodeLensOptions, CodeLensParams, DidChangeConfigurationParams,
     DidChangeTextDocumentParams, DidOpenTextDocumentParams, ExecuteCommandOptions,
-    ExecuteCommandParams, InitializeParams, InitializeResult, InitializedParams, MessageType,
-    ServerCapabilities, TextDocumentSyncCapability, TextDocumentSyncKind,
+    ExecuteCommandParams, HoverProviderCapability, InitializeParams, InitializeResult,
+    InitializedParams, MessageType, ServerCapabilities, TextDocumentSyncCapability,
+    TextDocumentSyncKind,
 };
 use tracing::{debug, info};
 
@@ -105,6 +106,7 @@ where
                     commands: SupportedCommands::all_supported_commands_as_string(),
                     ..Default::default()
                 }),
+                hover_provider: Some(HoverProviderCapability::Simple(true)),
                 ..Default::default()
             },
             ..Default::default()

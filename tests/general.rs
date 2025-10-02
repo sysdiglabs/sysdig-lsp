@@ -11,9 +11,10 @@ use sysdig_lsp::domain::scanresult::scan_type::ScanType;
 use tower_lsp::LanguageServer;
 use tower_lsp::lsp_types::{
     CodeActionContext, CodeActionParams, DiagnosticSeverity, DidChangeConfigurationParams,
-    DidChangeTextDocumentParams, DidOpenTextDocumentParams, ExecuteCommandParams, InitializeParams,
-    PartialResultParams, Position, Range, TextDocumentIdentifier, TextDocumentItem, Url,
-    VersionedTextDocumentIdentifier, WorkDoneProgressParams,
+    DidChangeTextDocumentParams, DidOpenTextDocumentParams, ExecuteCommandParams, HoverParams,
+    InitializeParams, PartialResultParams, Position, Range, TextDocumentIdentifier,
+    TextDocumentItem, TextDocumentPositionParams, Url, VersionedTextDocumentIdentifier,
+    WorkDoneProgressParams,
 };
 
 #[fixture]
@@ -341,6 +342,29 @@ async fn test_execute_command(
         diagnostic.range,
         Range::new(Position::new(0, 0), Position::new(0, 11))
     );
+}
+
+#[rstest]
+#[awt]
+#[tokio::test]
+async fn test_hover(#[future] server_with_open_file: TestSetup, open_file_url: Url) {
+    let params = HoverParams {
+        text_document_position_params: TextDocumentPositionParams {
+            text_document: TextDocumentIdentifier::new(open_file_url),
+            position: Position::new(0, 0),
+        },
+        work_done_progress_params: WorkDoneProgressParams::default(),
+    };
+    let result = server_with_open_file.server.hover(params).await;
+    assert!(result.is_ok());
+    let hover = result.unwrap().unwrap();
+    let expected_json = serde_json::json!({
+        "contents": {
+            "kind": "markdown",
+            "value": "# Sysdig Language Server\n---\n**_Sysdig Secure_** provides comprehensive security for your containers.\n\n### Features\n*   Vulnerability Scanning\n*   Runtime Security\n*   Compliance\n\n| Feature           | Status |\n| ----------------- | ------ |\n| Vulnerability Scan| ✅     |\n| Policy Advisor    | 🚧     |\n\n```rust\nfn main() {\n    println!(\"Hello, world!\");\n}\n```\n"
+        }
+    });
+    assert_eq!(serde_json::to_value(hover).unwrap(), expected_json);
 }
 
 #[rstest]
