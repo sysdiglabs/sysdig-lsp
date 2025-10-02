@@ -34,8 +34,10 @@ tracing = "0.1.41"
 tracing-subscriber = "0.3.19"
 
 [dev-dependencies]
-itertools = "0.14.0"
-lazy_static = "1.5.0"
-rstest = "0.26.1"
-tracing-subscriber = { version = "0.3.19", features = ["fmt", "env-filter"] }
+rstest = "0.21.0"
+serial_test = "3.1.1"
 tracing-test = "0.2.5"
+mockall = "0.13.0"
+
+[features]
+default = []
