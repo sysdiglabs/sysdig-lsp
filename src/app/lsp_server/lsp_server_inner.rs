@@ -4,8 +4,8 @@ use tower_lsp::lsp_types::{
     CodeActionOrCommand, CodeActionParams, CodeActionProviderCapability, CodeActionResponse,
     CodeLens, CodeLensOptions, CodeLensParams, Command, DidChangeConfigurationParams,
     DidChangeTextDocumentParams, DidOpenTextDocumentParams, ExecuteCommandOptions,
-    ExecuteCommandParams, InitializeParams, InitializeResult, InitializedParams, Location,
-    MessageType, ServerCapabilities, TextDocumentSyncCapability, TextDocumentSyncKind,
+    ExecuteCommandParams, InitializeParams, InitializeResult, InitializedParams, MessageType,
+    ServerCapabilities, TextDocumentSyncCapability, TextDocumentSyncKind,
 };
 use tracing::{debug, info};
 
@@ -190,18 +190,21 @@ where
 
     async fn execute_base_image_scan(
         &mut self,
-        location: Location,
+        location: tower_lsp::lsp_types::Location,
         image: String,
-    ) -> Result<Option<Value>> {
+    ) -> Result<()> {
         let image_scanner = self.component_factory_mut()?.image_scanner().map_err(|e| {
             Error::internal_error().with_message(format!("unable to create image scanner: {e}"))
         })?;
-        let mut command =
-            ScanBaseImageCommand::new(&image_scanner, &self.interactor, location, image);
-        command.execute().await.map(|_| None)
+        ScanBaseImageCommand::new(&image_scanner, &self.interactor, location, image)
+            .execute()
+            .await
     }
 
-    async fn execute_build_and_scan(&mut self, location: Location) -> Result<Option<Value>> {
+    async fn execute_build_and_scan(
+        &mut self,
+        location: tower_lsp::lsp_types::Location,
+    ) -> Result<()> {
         let factory = self.component_factory_mut()?;
         let image_scanner = factory.image_scanner().map_err(|e| {
             Error::internal_error().with_message(format!("unable to create image scanner: {e}"))
@@ -209,36 +212,39 @@ where
         let image_builder = factory.image_builder().map_err(|e| {
             Error::internal_error().with_message(format!("unable to create image builder: {e}"))
         })?;
-        let mut command =
-            BuildAndScanCommand::new(&image_builder, &image_scanner, &self.interactor, location);
-        command.execute().await.map(|_| None)
+        BuildAndScanCommand::new(&image_builder, &image_scanner, &self.interactor, location)
+            .execute()
+            .await
+    }
+
+    async fn handle_command_error(&self, command_name: &str, e: Error) -> Error {
+        self.interactor
+            .show_message(MessageType::ERROR, e.to_string().as_str())
+            .await;
+        Error {
+            code: e.code,
+            message: format!("error calling command: '{command_name}': {}", e.message).into(),
+            data: e.data,
+        }
     }
 
     pub async fn execute_command(&mut self, params: ExecuteCommandParams) -> Result<Option<Value>> {
         let command: SupportedCommands = params.try_into()?;
+        let command_name = command.to_string();
 
-        let result = match command.clone() {
+        let result = match command {
             SupportedCommands::ExecuteBaseImageScan { location, image } => {
                 self.execute_base_image_scan(location, image).await
             }
-
             SupportedCommands::ExecuteBuildAndScan { location } => {
                 self.execute_build_and_scan(location).await
             }
         };
 
-        if let Err(e) = &result {
-            self.interactor
-                .show_message(MessageType::ERROR, e.to_string().as_str())
-                .await;
-            return Err(Error {
-                code: e.code,
-                message: format!("error calling command: '{command}': {}", e.message).into(),
-                data: e.data.clone(),
-            });
+        match result {
+            Ok(_) => Ok(None),
+            Err(e) => Err(self.handle_command_error(&command_name, e).await),
         }
-
-        result
     }
 
     pub async fn shutdown(&self) -> Result<()> {
