@@ -42,17 +42,16 @@ impl<C> LSPServerInner<C>
 where
     C: LSPClient + Send + Sync + 'static,
 {
-    async fn initialize_component_factory_with(&mut self, config: &Value) -> Result<()> {
-        let Ok(config) = serde_json::from_value::<Config>(config.clone()) else {
-            return Err(Error::internal_error()
-                .with_message(format!("unable to transform json into config: {config}")));
-        };
+    fn update_component_factory(&mut self, config: &Value) -> Result<()> {
+        let config = serde_json::from_value::<Config>(config.clone()).map_err(|e| {
+            Error::internal_error()
+                .with_message(format!("unable to transform json into config: {e}"))
+        })?;
 
         debug!("updating with configuration: {config:?}");
 
-        let mut factory = ComponentFactory::default();
-        factory.initialize_with(config);
-        self.component_factory = Some(factory);
+        let factory = ComponentFactory::new(config)?;
+        self.component_factory.replace(factory);
 
         debug!("updated configuration");
         Ok(())
@@ -89,7 +88,7 @@ where
             });
         };
 
-        self.initialize_component_factory_with(&config).await?;
+        self.update_component_factory(&config)?;
 
         Ok(InitializeResult {
             capabilities: ServerCapabilities {
@@ -118,9 +117,7 @@ where
     }
 
     pub async fn did_change_configuration(&mut self, params: DidChangeConfigurationParams) {
-        let _ = self
-            .initialize_component_factory_with(&params.settings)
-            .await;
+        let _ = self.update_component_factory(&params.settings);
     }
 
     pub async fn did_open(&self, params: DidOpenTextDocumentParams) {
@@ -165,37 +162,29 @@ where
         Ok(Some(code_lenses))
     }
 
-    fn component_factory_mut(&mut self) -> Result<&mut ComponentFactory> {
-        self.component_factory
-            .as_mut()
-            .ok_or_else(|| Error::internal_error().with_message("LSP not initialized"))
-    }
-
     async fn execute_base_image_scan(
-        &mut self,
+        &self,
         location: tower_lsp::lsp_types::Location,
         image: String,
     ) -> Result<()> {
-        let image_scanner = self.component_factory_mut()?.image_scanner().map_err(|e| {
-            Error::internal_error().with_message(format!("unable to create image scanner: {e}"))
-        })?;
-        ScanBaseImageCommand::new(&image_scanner, &self.interactor, location, image)
+        let factory = self
+            .component_factory
+            .as_ref()
+            .ok_or_else(|| Error::internal_error().with_message("LSP not initialized"))?;
+        let image_scanner = factory.image_scanner();
+        ScanBaseImageCommand::new(image_scanner, &self.interactor, location, image)
             .execute()
             .await
     }
 
-    async fn execute_build_and_scan(
-        &mut self,
-        location: tower_lsp::lsp_types::Location,
-    ) -> Result<()> {
-        let factory = self.component_factory_mut()?;
-        let image_scanner = factory.image_scanner().map_err(|e| {
-            Error::internal_error().with_message(format!("unable to create image scanner: {e}"))
-        })?;
-        let image_builder = factory.image_builder().map_err(|e| {
-            Error::internal_error().with_message(format!("unable to create image builder: {e}"))
-        })?;
-        BuildAndScanCommand::new(&image_builder, &image_scanner, &self.interactor, location)
+    async fn execute_build_and_scan(&self, location: tower_lsp::lsp_types::Location) -> Result<()> {
+        let factory = self
+            .component_factory
+            .as_ref()
+            .ok_or_else(|| Error::internal_error().with_message("LSP not initialized"))?;
+        let image_scanner = factory.image_scanner();
+        let image_builder = factory.image_builder();
+        BuildAndScanCommand::new(image_builder, image_scanner, &self.interactor, location)
             .execute()
             .await
     }
@@ -211,7 +200,7 @@ where
         }
     }
 
-    pub async fn execute_command(&mut self, params: ExecuteCommandParams) -> Result<Option<Value>> {
+    pub async fn execute_command(&self, params: ExecuteCommandParams) -> Result<Option<Value>> {
         let command: SupportedCommands = params.try_into()?;
         let command_name = command.to_string();
 

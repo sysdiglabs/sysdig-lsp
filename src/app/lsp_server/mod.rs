@@ -85,7 +85,7 @@ where
     }
 
     async fn execute_command(&self, params: ExecuteCommandParams) -> Result<Option<Value>> {
-        self.inner.write().await.execute_command(params).await
+        self.inner.read().await.execute_command(params).await
     }
 
     async fn shutdown(&self) -> Result<()> {
