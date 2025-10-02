@@ -1,5 +1,8 @@
 use clap::Parser;
-use sysdig_lsp::{app::LSPServer, infra::lsp_logger::LSPLogger};
+use sysdig_lsp::{
+    app::LSPServer,
+    infra::{ConcreteComponentFactory, lsp_logger::LSPLogger},
+};
 use tower_lsp::{LspService, Server};
 use tracing_subscriber::layer::SubscriberExt;
 
@@ -21,7 +24,7 @@ async fn main() {
         tracing::subscriber::set_global_default(subscriber)
             .expect("setting default subscriber failed");
 
-        LSPServer::new(client)
+        LSPServer::new(client, ConcreteComponentFactory)
     });
 
     Server::new(stdin, stdout, messages).serve(service).await;

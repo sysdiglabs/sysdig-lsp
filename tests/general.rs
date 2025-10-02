@@ -1,309 +1,352 @@
+mod common;
+
+use common::TestSetup;
+use rstest::{fixture, rstest};
 use serde_json::json;
-use tower_lsp::lsp_types::{CodeActionOrCommand, CodeLens, Command, MessageType, Position, Range};
+use std::collections::HashMap;
+use sysdig_lsp::domain::scanresult::architecture::Architecture;
+use sysdig_lsp::domain::scanresult::operating_system::{Family, OperatingSystem};
+use sysdig_lsp::domain::scanresult::scan_result::ScanResult;
+use sysdig_lsp::domain::scanresult::scan_type::ScanType;
+use tower_lsp::LanguageServer;
+use tower_lsp::lsp_types::{
+    CodeActionContext, CodeActionParams, DiagnosticSeverity, DidChangeConfigurationParams,
+    DidChangeTextDocumentParams, DidOpenTextDocumentParams, ExecuteCommandParams, InitializeParams,
+    PartialResultParams, Position, Range, TextDocumentIdentifier, TextDocumentItem, Url,
+    VersionedTextDocumentIdentifier, WorkDoneProgressParams,
+};
 
-mod test;
-
-#[tokio::test]
-async fn when_the_lsp_is_loaded_initializes_correctly() {
-    let mut client = test::TestClient::new();
-    let response = client.initialize_lsp().await;
-
-    assert!(response.capabilities.code_action_provider.is_some());
-    assert!(
-        client
-            .recorder()
-            .messages_shown()
-            .await
-            .contains(&(MessageType::INFO, "Sysdig LSP initialized".to_string()))
-    )
-}
-
-#[tokio::test]
-async fn when_the_client_asks_for_the_existing_code_actions_it_receives_the_available_code_actions()
-{
-    let mut client = test::TestClient::new_initialized().await;
-
-    client
-        .open_file_with_contents("Dockerfile", "FROM alpine")
-        .await;
-
-    let response = client
-        .request_available_actions_in_line("Dockerfile", 0)
-        .await;
-
-    assert_eq!(
-        response.unwrap(),
-        vec![
-            CodeActionOrCommand::Command(Command {
-                title: "Build and scan".to_string(),
-                command: "sysdig-lsp.execute-build-and-scan".to_string(),
-                arguments: Some(vec![json!("file://dockerfile/"), json!(0)])
-            }),
-            CodeActionOrCommand::Command(Command {
-                title: "Scan base image".to_string(),
-                command: "sysdig-lsp.execute-scan".to_string(),
-                arguments: Some(vec![
-                    json!("file://dockerfile/"),
-                    json!({"start": {"line": 0, "character": 0}, "end": {"line": 0, "character": 11}}),
-                    json!("alpine"),
-                ])
-            })
-        ]
-    );
-}
-
-#[tokio::test]
-async fn when_the_client_asks_for_the_existing_code_actions_but_the_dockerfile_contains_multiple_froms_it_only_returns_the_latest()
- {
-    let mut client = test::TestClient::new_initialized().await;
-
-    client
-        .open_file_with_contents("Dockerfile", "FROM alpine\nFROM ubuntu")
-        .await;
-
-    let response_for_first_line = client
-        .request_available_actions_in_line("Dockerfile", 0)
-        .await;
-    assert!(response_for_first_line.unwrap().is_empty());
-
-    let response_for_second_line = client
-        .request_available_actions_in_line("Dockerfile", 1)
-        .await;
-
-    assert_eq!(
-        response_for_second_line.unwrap(),
-        vec![
-            CodeActionOrCommand::Command(Command {
-                title: "Build and scan".to_string(),
-                command: "sysdig-lsp.execute-build-and-scan".to_string(),
-                arguments: Some(vec![json!("file://dockerfile/"), json!(1)])
-            }),
-            CodeActionOrCommand::Command(Command {
-                title: "Scan base image".to_string(),
-                command: "sysdig-lsp.execute-scan".to_string(),
-                arguments: Some(vec![
-                    json!("file://dockerfile/"),
-                    json!({"start": {"line": 1, "character": 0}, "end": {"line": 1, "character": 11}}),
-                    json!("ubuntu"),
-                ])
-            })
-        ]
-    );
-}
-
-#[tokio::test]
-async fn when_the_client_asks_for_the_existing_code_lens_it_receives_the_available_code_lens() {
-    let mut client = test::TestClient::new_initialized().await;
-
-    // Open a Dockerfile containing a single "FROM" statement.
-    client
-        .open_file_with_contents("Dockerfile", "FROM alpine")
-        .await;
-
-    // Request code lens on the line with the FROM statement (line 0).
-    let response = client
-        .request_available_code_lens_in_file("Dockerfile")
-        .await;
-
-    // Expect a CodeLens with the appropriate command.
-    assert_eq!(
-        response.unwrap(),
-        vec![
-            CodeLens {
-                range: Range::new(Position::new(0, 0), Position::new(0, 11)),
-                command: Some(Command {
-                    title: "Build and scan".to_string(),
-                    command: "sysdig-lsp.execute-build-and-scan".to_string(),
-                    arguments: Some(vec![json!("file://dockerfile/"), json!(0)])
-                }),
-                data: None
-            },
-            CodeLens {
-                range: Range::new(Position::new(0, 0), Position::new(0, 11)),
-                command: Some(Command {
-                    title: "Scan base image".to_string(),
-                    command: "sysdig-lsp.execute-scan".to_string(),
-                    arguments: Some(vec![
-                        json!("file://dockerfile/"),
-                        json!({"start": {"line": 0, "character": 0}, "end": {"line": 0, "character": 11}}),
-                        json!("alpine"),
-                    ])
-                }),
-                data: None
+#[fixture]
+async fn initialized_server() -> TestSetup {
+    let setup = TestSetup::new();
+    let params = InitializeParams {
+        initialization_options: Some(serde_json::json!({
+            "sysdig": {
+                "apiUrl": "http://localhost:8080",
+                "api_token": "dummy-token"
             }
-        ]
-    );
+        })),
+        ..Default::default()
+    };
+    let result = setup.server.initialize(params).await;
+    assert!(result.is_ok());
+    setup
 }
 
+#[rstest]
+#[awt]
 #[tokio::test]
-async fn when_the_client_asks_for_the_existing_code_lens_but_the_dockerfile_contains_multiple_froms_it_only_returns_the_latest()
- {
-    let mut client = test::TestClient::new_initialized().await;
-    client
-        .open_file_with_contents("Dockerfile", "FROM alpine\nFROM ubuntu")
-        .await;
-
-    let response = client
-        .request_available_code_lens_in_file("Dockerfile")
-        .await;
-
-    assert_eq!(
-        response.unwrap(),
-        vec![
-            CodeLens {
-                range: Range::new(Position::new(1, 0), Position::new(1, 11)),
-                command: Some(Command {
-                    title: "Build and scan".to_string(),
-                    command: "sysdig-lsp.execute-build-and-scan".to_string(),
-                    arguments: Some(vec![json!("file://dockerfile/"), json!(1)])
-                }),
-                data: None
-            },
-            CodeLens {
-                range: Range::new(Position::new(1, 0), Position::new(1, 11)),
-                command: Some(Command {
-                    title: "Scan base image".to_string(),
-                    command: "sysdig-lsp.execute-scan".to_string(),
-                    arguments: Some(vec![
-                        json!("file://dockerfile/"),
-                        json!({"start": {"line": 1, "character": 0}, "end": {"line": 1, "character": 11}}),
-                        json!("ubuntu"),
-                    ])
-                }),
-                data: None
+async fn test_did_change_configuration(#[future] initialized_server: TestSetup) {
+    let params = DidChangeConfigurationParams {
+        settings: serde_json::json!({
+            "sysdig": {
+                "apiUrl": "http://localhost:8080",
+                "api_token": "dummy-token"
             }
-        ]
-    );
+        }),
+    };
+    initialized_server
+        .server
+        .did_change_configuration(params)
+        .await;
 }
 
+#[rstest]
+#[awt]
 #[tokio::test]
-async fn when_the_client_asks_for_code_lens_in_a_compose_file_it_receives_them() {
-    let mut client = test::TestClient::new_initialized().await;
-    client
-        .open_file_with_contents(
-            "docker-compose.yml",
-            include_str!("fixtures/docker-compose.yml"),
-        )
-        .await;
+async fn test_did_open(#[future] initialized_server: TestSetup) {
+    let params = DidOpenTextDocumentParams {
+        text_document: TextDocumentItem::new(
+            "file:///Dockerfile".parse().unwrap(),
+            "dockerfile".to_string(),
+            1,
+            "FROM alpine".to_string(),
+        ),
+    };
+    initialized_server.server.did_open(params).await;
+}
 
-    let response = client
-        .request_available_code_lens_in_file("docker-compose.yml")
-        .await;
+#[rstest]
+#[awt]
+#[tokio::test]
+async fn test_did_change(#[future] initialized_server: TestSetup) {
+    let params = DidChangeTextDocumentParams {
+        text_document: VersionedTextDocumentIdentifier::new(
+            "file:///Dockerfile".parse().unwrap(),
+            1,
+        ),
+        content_changes: vec![],
+    };
+    initialized_server.server.did_change(params).await;
+}
 
-    assert_eq!(
-        response.unwrap(),
-        vec![
-            CodeLens {
-                range: Range::new(Position::new(2, 11), Position::new(2, 23)),
-                command: Some(Command {
-                    title: "Scan base image".to_string(),
-                    command: "sysdig-lsp.execute-scan".to_string(),
-                    arguments: Some(vec![
-                        json!("file://docker-compose.yml/"),
-                        json!({"start": {"line": 2, "character": 11}, "end": {"line": 2, "character": 23}}),
-                        json!("nginx:latest")
-                    ])
-                }),
-                data: None
+#[fixture]
+fn open_file_url() -> Url {
+    "file:///Dockerfile".parse().unwrap()
+}
+
+#[fixture]
+#[awt]
+async fn server_with_open_file(
+    #[future] initialized_server: TestSetup,
+    open_file_url: Url,
+) -> TestSetup {
+    initialized_server
+        .server
+        .did_open(DidOpenTextDocumentParams {
+            text_document: TextDocumentItem::new(
+                open_file_url.clone(),
+                "dockerfile".to_string(),
+                1,
+                "FROM alpine".to_string(),
+            ),
+        })
+        .await;
+    initialized_server
+}
+
+use sysdig_lsp::domain::scanresult::{package_type::PackageType, severity::Severity};
+
+#[fixture]
+fn scan_result() -> ScanResult {
+    let mut result = ScanResult::new(
+        ScanType::Docker,
+        "alpine:latest".to_string(),
+        "sha256:12345".to_string(),
+        Some("sha256:67890".to_string()),
+        OperatingSystem::new(Family::Linux, "alpine:3.18".to_string()),
+        123456,
+        Architecture::Amd64,
+        HashMap::new(),
+        chrono::Utc::now(),
+    );
+
+    let layer = result.add_layer(
+        "sha256:layer1".to_string(),
+        0,
+        Some(1024),
+        "COPY . .".to_string(),
+    );
+
+    let package1 = result.add_package(
+        PackageType::Os,
+        "package1".to_string(),
+        "1.0.0".to_string(),
+        "/usr/lib/package1".to_string(),
+        layer.clone(),
+    );
+
+    result.add_package(
+        PackageType::Os,
+        "package2".to_string(),
+        "2.0.0".to_string(),
+        "/usr/lib/package2".to_string(),
+        layer,
+    );
+
+    let vulnerability = result.add_vulnerability(
+        "CVE-2021-1234".to_string(),
+        Severity::High,
+        chrono::NaiveDate::from_ymd_opt(2021, 1, 1).unwrap(),
+        None,
+        false,
+        Some("1.0.1".to_string()),
+    );
+
+    package1.add_vulnerability_found(vulnerability);
+
+    result
+}
+
+#[rstest]
+#[awt]
+#[tokio::test]
+async fn test_code_action(#[future] server_with_open_file: TestSetup, open_file_url: Url) {
+    let params = CodeActionParams {
+        text_document: TextDocumentIdentifier::new(open_file_url),
+        range: Range::new(Position::new(0, 0), Position::new(0, 0)),
+        context: CodeActionContext::default(),
+        work_done_progress_params: WorkDoneProgressParams::default(),
+        partial_result_params: PartialResultParams::default(),
+    };
+    let result = server_with_open_file
+        .server
+        .code_action(params)
+        .await
+        .unwrap()
+        .unwrap();
+
+    let mut result_json = serde_json::to_value(result).unwrap();
+    // Sort by command title to have a deterministic order for comparison
+    result_json.as_array_mut().unwrap().sort_by(|a, b| {
+        a["title"]
+            .as_str()
+            .unwrap()
+            .cmp(b["title"].as_str().unwrap())
+    });
+
+    let expected_json = serde_json::json!([
+        {
+            "arguments": [
+                {
+                    "range": {
+                        "end": { "character": 11, "line": 0 },
+                        "start": { "character": 0, "line": 0 }
+                    },
+                    "uri": "file:///Dockerfile"
+                }
+            ],
+            "command": "sysdig-lsp.execute-build-and-scan",
+            "title": "Build and scan"
+        },
+        {
+            "arguments": [
+                {
+                    "range": {
+                        "end": { "character": 11, "line": 0 },
+                        "start": { "character": 0, "line": 0 }
+                    },
+                    "uri": "file:///Dockerfile"
+                },
+                "alpine"
+            ],
+            "command": "sysdig-lsp.execute-scan",
+            "title": "Scan base image"
+        }
+    ]);
+
+    assert_eq!(result_json, expected_json);
+}
+
+#[rstest]
+#[awt]
+#[tokio::test]
+async fn test_code_lens(#[future] server_with_open_file: TestSetup, open_file_url: Url) {
+    let params = tower_lsp::lsp_types::CodeLensParams {
+        text_document: TextDocumentIdentifier::new(open_file_url),
+        work_done_progress_params: WorkDoneProgressParams::default(),
+        partial_result_params: PartialResultParams::default(),
+    };
+
+    let result = server_with_open_file
+        .server
+        .code_lens(params)
+        .await
+        .unwrap()
+        .unwrap();
+
+    let mut result_json = serde_json::to_value(result).unwrap();
+    // Sort by command title to have a deterministic order for comparison
+    result_json.as_array_mut().unwrap().sort_by(|a, b| {
+        a["command"]["title"]
+            .as_str()
+            .unwrap()
+            .cmp(b["command"]["title"].as_str().unwrap())
+    });
+
+    let expected_json = serde_json::json!([
+        {
+            "command": {
+                "arguments": [
+                    {
+                        "range": {
+                            "end": { "character": 11, "line": 0 },
+                            "start": { "character": 0, "line": 0 }
+                        },
+                        "uri": "file:///Dockerfile"
+                    }
+                ],
+                "command": "sysdig-lsp.execute-build-and-scan",
+                "title": "Build and scan"
             },
-            CodeLens {
-                range: Range::new(Position::new(4, 11), Position::new(4, 22)),
-                command: Some(Command {
-                    title: "Scan base image".to_string(),
-                    command: "sysdig-lsp.execute-scan".to_string(),
-                    arguments: Some(vec![
-                        json!("file://docker-compose.yml/"),
-                        json!({"start": {"line": 4, "character": 11}, "end": {"line": 4, "character": 22}}),
-                        json!("postgres:13")
-                    ])
-                }),
-                data: None
+            "range": {
+                "end": { "character": 11, "line": 0 },
+                "start": { "character": 0, "line": 0 }
             }
-        ]
-    );
-}
-
-#[tokio::test]
-async fn when_the_client_asks_for_code_actions_in_a_compose_file_it_receives_them() {
-    let mut client = test::TestClient::new_initialized().await;
-    client
-        .open_file_with_contents(
-            "docker-compose.yml",
-            include_str!("fixtures/docker-compose.yml"),
-        )
-        .await;
-
-    let response = client
-        .request_available_actions_in_line("docker-compose.yml", 2)
-        .await;
-
-    assert_eq!(
-        response.unwrap(),
-        vec![CodeActionOrCommand::Command(Command {
-            title: "Scan base image".to_string(),
-            command: "sysdig-lsp.execute-scan".to_string(),
-            arguments: Some(vec![
-                json!("file://docker-compose.yml/"),
-                json!({"start": {"line": 2, "character": 11}, "end": {"line": 2, "character": 23}}),
-                json!("nginx:latest"),
-            ])
-        })]
-    );
-}
-
-#[tokio::test]
-async fn when_the_client_asks_for_code_lens_in_a_complex_compose_yaml_file_it_receives_them() {
-    let mut client = test::TestClient::new_initialized().await;
-    client
-        .open_file_with_contents("compose.yaml", include_str!("fixtures/compose.yaml"))
-        .await;
-
-    let response = client
-        .request_available_code_lens_in_file("compose.yaml")
-        .await;
-
-    assert_eq!(
-        response.unwrap(),
-        vec![
-            CodeLens {
-                range: Range::new(Position::new(4, 13), Position::new(4, 25)),
-                command: Some(Command {
-                    title: "Scan base image".to_string(),
-                    command: "sysdig-lsp.execute-scan".to_string(),
-                    arguments: Some(vec![
-                        json!("file://compose.yaml/"),
-                        json!({"start": {"line": 4, "character": 13}, "end": {"line": 4, "character": 25}}),
-                        json!("nginx:latest")
-                    ])
-                }),
-                data: None
+        },
+        {
+            "command": {
+                "arguments": [
+                    {
+                        "range": {
+                            "end": { "character": 11, "line": 0 },
+                            "start": { "character": 0, "line": 0 }
+                        },
+                        "uri": "file:///Dockerfile"
+                    },
+                    "alpine"
+                ],
+                "command": "sysdig-lsp.execute-scan",
+                "title": "Scan base image"
             },
-            CodeLens {
-                range: Range::new(Position::new(9, 6), Position::new(9, 17)),
-                command: Some(Command {
-                    title: "Scan base image".to_string(),
-                    command: "sysdig-lsp.execute-scan".to_string(),
-                    arguments: Some(vec![
-                        json!("file://compose.yaml/"),
-                        json!({"start": {"line": 9, "character": 6}, "end": {"line": 9, "character": 17}}),
-                        json!("postgres:13")
-                    ])
-                }),
-                data: None
-            },
-            CodeLens {
-                range: Range::new(Position::new(13, 11), Position::new(13, 21)),
-                command: Some(Command {
-                    title: "Scan base image".to_string(),
-                    command: "sysdig-lsp.execute-scan".to_string(),
-                    arguments: Some(vec![
-                        json!("file://compose.yaml/"),
-                        json!({"start": {"line": 13, "character": 11}, "end": {"line": 13, "character": 21}}),
-                        json!("my-api:1.0")
-                    ])
-                }),
-                data: None
+            "range": {
+                "end": { "character": 11, "line": 0 },
+                "start": { "character": 0, "line": 0 }
             }
-        ]
+        }
+    ]);
+
+    assert_eq!(result_json, expected_json);
+}
+
+#[rstest]
+#[awt]
+#[tokio::test]
+async fn test_execute_command(
+    #[future] server_with_open_file: TestSetup,
+    open_file_url: Url,
+    scan_result: ScanResult,
+) {
+    server_with_open_file
+        .component_factory
+        .image_scanner
+        .lock()
+        .await
+        .expect_scan_image()
+        .with(mockall::predicate::eq("alpine"))
+        .times(1)
+        .returning(move |_| Ok(scan_result.clone()));
+
+    server_with_open_file
+        .client_recorder
+        .diagnostics
+        .lock()
+        .await
+        .clear();
+
+    let params = ExecuteCommandParams {
+        command: "sysdig-lsp.execute-scan".to_string(),
+        arguments: vec![
+            json!({"range":{"end":{"character":11,"line":0},"start":{"character": 0,"line":0}},"uri":open_file_url}),
+            json!("alpine"),
+        ],
+        work_done_progress_params: WorkDoneProgressParams::default(),
+    };
+    let result = server_with_open_file.server.execute_command(params).await;
+    assert!(result.is_ok());
+
+    let diagnostics = server_with_open_file
+        .client_recorder
+        .diagnostics
+        .lock()
+        .await;
+    assert_eq!(diagnostics.len(), 1);
+    let diagnostic = &diagnostics[0][0];
+    assert_eq!(
+        diagnostic.message,
+        "Vulnerabilities found for alpine: 0 Critical, 1 High, 0 Medium, 0 Low, 0 Negligible"
     );
+    assert_eq!(diagnostic.severity, Some(DiagnosticSeverity::INFORMATION));
+    assert_eq!(
+        diagnostic.range,
+        Range::new(Position::new(0, 0), Position::new(0, 11))
+    );
+}
+
+#[rstest]
+#[awt]
+#[tokio::test]
+async fn test_shutdown(#[future] initialized_server: TestSetup) {
+    let result = initialized_server.server.shutdown().await;
+    assert!(result.is_ok());
 }
