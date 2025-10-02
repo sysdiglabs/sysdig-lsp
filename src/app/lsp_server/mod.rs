@@ -12,6 +12,7 @@ use tower_lsp::lsp_types::{
 use super::{InMemoryDocumentDatabase, LSPClient};
 
 pub mod command_generator;
+pub mod commands;
 mod lsp_server_inner;
 pub mod supported_commands;
 use lsp_server_inner::LSPServerInner;

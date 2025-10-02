@@ -1,103 +1,80 @@
-use std::{
-    path::{Path, PathBuf},
-    str::FromStr,
-    sync::Arc,
-};
+use tower_lsp::jsonrpc::Result;
+
+#[async_trait::async_trait]
+pub trait LspCommand {
+    async fn execute(&mut self) -> Result<()>;
+}
 
 use itertools::Itertools;
-use tower_lsp::{
-    jsonrpc::{Error, Result},
-    lsp_types::{Diagnostic, DiagnosticSeverity, MessageType, Position, Range},
-};
+use tower_lsp::lsp_types::{Diagnostic, DiagnosticSeverity, Location, MessageType};
 
 use crate::{
-    domain::scanresult::{layer::Layer, scan_result::ScanResult, severity::Severity},
-    infra::parse_dockerfile,
+    app::{ImageScanner, LSPClient, LspInteractor},
+    domain::scanresult::{scan_result::ScanResult, severity::Severity},
 };
 
-use super::{
-    ImageBuilder, ImageScanner, InMemoryDocumentDatabase, LSPClient, lsp_server::WithContext,
-};
+use super::WithContext;
 
-pub struct CommandExecutor<C> {
-    client: C,
-    document_database: InMemoryDocumentDatabase,
+pub struct ScanBaseImageCommand<'a, C, S>
+where
+    S: ImageScanner,
+{
+    image_scanner: &'a S,
+    interactor: &'a LspInteractor<C>,
+    location: Location,
+    image: String,
 }
 
-impl<C> CommandExecutor<C> {
-    pub fn new(client: C, document_database: InMemoryDocumentDatabase) -> Self {
+impl<'a, C, S> ScanBaseImageCommand<'a, C, S>
+where
+    S: ImageScanner,
+{
+    pub fn new(
+        image_scanner: &'a S,
+        interactor: &'a LspInteractor<C>,
+        location: Location,
+        image: String,
+    ) -> Self {
         Self {
-            client,
-            document_database,
+            image_scanner,
+            interactor,
+            location,
+            image,
         }
-    }
-
-    fn image_from_line<'a>(&self, line: u32, contents: &'a str) -> Option<&'a str> {
-        let line_number: usize = line.try_into().ok()?;
-        let line_that_contains_from = contents.lines().nth(line_number)?;
-        line_that_contains_from
-            .strip_prefix("FROM ")?
-            .split_whitespace()
-            .next()
     }
 }
 
-impl<C> CommandExecutor<C>
+#[async_trait::async_trait]
+impl<'a, C, S> LspCommand for ScanBaseImageCommand<'a, C, S>
 where
-    C: LSPClient,
+    C: LSPClient + Sync,
+    S: ImageScanner + Sync,
 {
-    pub async fn update_document_with_text(&self, uri: &str, text: &str) {
-        self.document_database.write_document_text(uri, text).await;
-        self.document_database.remove_diagnostics(uri).await;
-        let _ = self.publish_all_diagnostics().await;
-    }
+    async fn execute(&mut self) -> tower_lsp::jsonrpc::Result<()> {
+        let image_name = &self.image;
+        self.interactor
+            .show_message(
+                MessageType::INFO,
+                format!("Starting scan of {image_name}...").as_str(),
+            )
+            .await;
 
-    pub async fn show_message(&self, message_type: MessageType, message: &str) {
-        self.client.show_message(message_type, message).await;
-    }
-
-    async fn publish_all_diagnostics(&self) -> Result<()> {
-        let all_diagnostics = self.document_database.all_diagnostics().await;
-        for (url, diagnostics) in all_diagnostics {
-            self.client
-                .publish_diagnostics(&url, diagnostics, None)
-                .await;
-        }
-        Ok(())
-    }
-}
-
-impl<C> CommandExecutor<C>
-where
-    C: LSPClient,
-{
-    pub async fn scan_image(
-        &self,
-        uri: &str,
-        range: Range,
-        image_name: &str,
-        image_scanner: &impl ImageScanner,
-    ) -> Result<()> {
-        self.show_message(
-            MessageType::INFO,
-            format!("Starting scan of {image_name}...").as_str(),
-        )
-        .await;
-
-        let scan_result = image_scanner
+        let scan_result = self
+            .image_scanner
             .scan_image(image_name)
             .await
-            .map_err(|e| Error::internal_error().with_message(e.to_string()))?;
+            .map_err(|e| tower_lsp::jsonrpc::Error::internal_error().with_message(e.to_string()))?;
 
-        self.show_message(
-            MessageType::INFO,
-            format!("Finished scan of {image_name}.").as_str(),
-        )
-        .await;
+        self.interactor
+            .show_message(
+                MessageType::INFO,
+                format!("Finished scan of {image_name}.").as_str(),
+            )
+            .await;
 
         let diagnostic = {
             let mut diagnostic = Diagnostic {
-                range,
+                range: self.location.range,
                 severity: Some(DiagnosticSeverity::HINT),
                 message: "No vulnerabilities found.".to_owned(),
                 ..Default::default()
@@ -128,80 +105,124 @@ where
             diagnostic
         };
 
-        self.document_database.remove_diagnostics(uri).await;
-        self.document_database
+        let uri = self.location.uri.as_str();
+        self.interactor.remove_diagnostics(uri).await;
+        self.interactor
             .append_document_diagnostics(uri, &[diagnostic])
             .await;
-        self.publish_all_diagnostics().await
+        self.interactor.publish_all_diagnostics().await
     }
+}
 
-    pub async fn build_and_scan_from_file(
-        &self,
-        uri: &Path,
-        line: u32,
-        image_builder: &impl ImageBuilder,
-        image_scanner: &impl ImageScanner,
-    ) -> Result<()> {
+use std::{path::PathBuf, str::FromStr, sync::Arc};
+use tower_lsp::lsp_types::{Position, Range};
+
+use crate::{app::ImageBuilder, domain::scanresult::layer::Layer, infra::parse_dockerfile};
+
+pub struct BuildAndScanCommand<'a, C, B, S>
+where
+    B: ImageBuilder,
+    S: ImageScanner,
+{
+    image_builder: &'a B,
+    image_scanner: &'a S,
+    interactor: &'a LspInteractor<C>,
+    location: Location,
+}
+
+impl<'a, C, B, S> BuildAndScanCommand<'a, C, B, S>
+where
+    B: ImageBuilder,
+    S: ImageScanner,
+{
+    pub fn new(
+        image_builder: &'a B,
+        image_scanner: &'a S,
+        interactor: &'a LspInteractor<C>,
+        location: Location,
+    ) -> Self {
+        Self {
+            image_builder,
+            image_scanner,
+            interactor,
+            location,
+        }
+    }
+}
+
+#[async_trait::async_trait]
+impl<'a, C, B, S> LspCommand for BuildAndScanCommand<'a, C, B, S>
+where
+    C: LSPClient + Sync,
+    B: ImageBuilder + Sync,
+    S: ImageScanner + Sync,
+{
+    async fn execute(&mut self) -> Result<()> {
+        let uri = self.location.uri.as_str();
+        let line = self.location.range.start.line;
+
         let document_text = self
-            .document_database
-            .read_document_text(uri.to_str().unwrap_or_default())
+            .interactor
+            .read_document_text(uri)
             .await
             .ok_or_else(|| {
-                Error::internal_error().with_message("unable to obtain document to scan")
+                tower_lsp::jsonrpc::Error::internal_error()
+                    .with_message("unable to obtain document to scan")
             })?;
 
-        let uri_without_file_path = uri
-            .to_str()
-            .and_then(|s| s.strip_prefix("file://"))
-            .ok_or_else(|| {
-                Error::internal_error().with_message("unable to strip prefix file:// from uri")
-            })?;
+        let uri_without_file_path = uri.strip_prefix("file://").ok_or_else(|| {
+            tower_lsp::jsonrpc::Error::internal_error()
+                .with_message("unable to strip prefix file:// from uri")
+        })?;
 
-        self.show_message(
-            MessageType::INFO,
-            format!("Starting build of {uri_without_file_path}...").as_str(),
-        )
-        .await;
+        self.interactor
+            .show_message(
+                MessageType::INFO,
+                format!("Starting build of {uri_without_file_path}...").as_str(),
+            )
+            .await;
 
-        let build_result = image_builder
+        let build_result = self
+            .image_builder
             .build_image(&PathBuf::from_str(uri_without_file_path).unwrap())
             .await
-            .map_err(|e| Error::internal_error().with_message(e.to_string()))?;
+            .map_err(|e| tower_lsp::jsonrpc::Error::internal_error().with_message(e.to_string()))?;
 
-        self.show_message(
-            MessageType::INFO,
-            format!(
-                "Temporal image built '{}', starting scan...",
-                &build_result.image_name
+        self.interactor
+            .show_message(
+                MessageType::INFO,
+                format!(
+                    "Temporal image built '{}', starting scan...",
+                    &build_result.image_name
+                )
+                .as_str(),
             )
-            .as_str(),
-        )
-        .await;
+            .await;
 
-        let scan_result = image_scanner
+        let scan_result = self
+            .image_scanner
             .scan_image(&build_result.image_name)
             .await
-            .map_err(|e| Error::internal_error().with_message(e.to_string()))?;
+            .map_err(|e| tower_lsp::jsonrpc::Error::internal_error().with_message(e.to_string()))?;
 
-        self.show_message(
-            MessageType::INFO,
-            format!("Finished scan of {}.", &build_result.image_name).as_str(),
-        )
-        .await;
+        self.interactor
+            .show_message(
+                MessageType::INFO,
+                format!("Finished scan of {}.", &build_result.image_name).as_str(),
+            )
+            .await;
 
         let diagnostic = diagnostic_for_image(line, &document_text, &scan_result);
         let diagnostics_per_layer = diagnostics_for_layers(&document_text, &scan_result)?;
 
-        self.document_database
-            .remove_diagnostics(uri.to_str().unwrap())
+        self.interactor.remove_diagnostics(uri).await;
+        self.interactor
+            .append_document_diagnostics(uri, &[diagnostic])
             .await;
-        self.document_database
-            .append_document_diagnostics(uri.to_str().unwrap(), &[diagnostic])
+        self.interactor
+            .append_document_diagnostics(uri, &diagnostics_per_layer)
             .await;
-        self.document_database
-            .append_document_diagnostics(uri.to_str().unwrap(), &diagnostics_per_layer)
-            .await;
-        self.publish_all_diagnostics().await
+        self.interactor.publish_all_diagnostics().await
     }
 }
 
@@ -309,7 +330,7 @@ fn diagnostic_for_image(line: u32, document_text: &str, scan_result: &ScanResult
             .iter()
             .counts_by(|v| v.severity());
         diagnostic.message = format!(
-            "Total vulnerabilities found: {} Critical, {} High, {} Medium, {} Low, {} Negligible",
+            "Vulnerabilities found: {} Critical, {} High, {} Medium, {} Low, {} Negligible",
             vulns.get(&Severity::Critical).unwrap_or(&0_usize),
             vulns.get(&Severity::High).unwrap_or(&0_usize),
             vulns.get(&Severity::Medium).unwrap_or(&0_usize),

@@ -1,6 +1,3 @@
-use std::path::PathBuf;
-use std::str::FromStr;
-
 use serde_json::Value;
 use tower_lsp::jsonrpc::{Error, ErrorCode, Result};
 use tower_lsp::lsp_types::{
@@ -8,20 +5,21 @@ use tower_lsp::lsp_types::{
     CodeLens, CodeLensOptions, CodeLensParams, Command, DidChangeConfigurationParams,
     DidChangeTextDocumentParams, DidOpenTextDocumentParams, ExecuteCommandOptions,
     ExecuteCommandParams, InitializeParams, InitializeResult, InitializedParams, MessageType,
-    Range, ServerCapabilities, TextDocumentSyncCapability, TextDocumentSyncKind,
+    ServerCapabilities, TextDocumentSyncCapability, TextDocumentSyncKind,
 };
 use tracing::{debug, info};
 
-use super::super::commands::CommandExecutor;
+use super::super::LspInteractor;
 use super::super::component_factory::{ComponentFactory, Config};
 use super::super::queries::QueryExecutor;
 use super::command_generator;
+use super::commands::{BuildAndScanCommand, LspCommand, ScanBaseImageCommand};
 use super::{InMemoryDocumentDatabase, LSPClient, WithContext};
 
 use super::supported_commands::SupportedCommands;
 
 pub struct LSPServerInner<C> {
-    command_executor: CommandExecutor<C>,
+    interactor: LspInteractor<C>,
     query_executor: QueryExecutor,
     component_factory: ComponentFactory,
 }
@@ -31,7 +29,7 @@ impl<C> LSPServerInner<C> {
         let document_database = InMemoryDocumentDatabase::default();
 
         LSPServerInner {
-            command_executor: CommandExecutor::new(client, document_database.clone()),
+            interactor: LspInteractor::new(client, document_database.clone()),
             query_executor: QueryExecutor::new(document_database.clone()),
             component_factory: Default::default(), // to be initialized in the initialize method of the LSP
         }
@@ -96,7 +94,7 @@ where
 
     pub async fn initialized(&self, _: InitializedParams) {
         info!("Initialized");
-        self.command_executor
+        self.interactor
             .show_message(MessageType::INFO, "Sysdig LSP initialized")
             .await;
     }
@@ -108,7 +106,7 @@ where
     }
 
     pub async fn did_open(&self, params: DidOpenTextDocumentParams) {
-        self.command_executor
+        self.interactor
             .update_document_with_text(
                 params.text_document.uri.as_str(),
                 params.text_document.text.as_str(),
@@ -118,7 +116,7 @@ where
 
     pub async fn did_change(&self, params: DidChangeTextDocumentParams) {
         if let Some(change) = params.content_changes.into_iter().next_back() {
-            self.command_executor
+            self.interactor
                 .update_document_with_text(params.text_document.uri.as_str(), &change.text)
                 .await;
         }
@@ -191,27 +189,38 @@ where
 
         let result = match command.clone() {
             SupportedCommands::ExecuteBaseImageScan { location, image } => {
-                execute_command_scan_base_image(
-                    self,
-                    location.uri.to_string(),
-                    location.range,
-                    image,
-                )
-                .await
-                .map(|_| None)
+                let image_scanner = self.component_factory.image_scanner().map_err(|e| {
+                    Error::internal_error()
+                        .with_message(format!("unable to create image scanner: {e}"))
+                })?;
+                let mut command =
+                    ScanBaseImageCommand::new(&image_scanner, &self.interactor, location, image);
+                command.execute().await.map(|_| None)
             }
 
             SupportedCommands::ExecuteBuildAndScan { location } => {
-                execute_command_build_and_scan(self, location.uri.to_string(), location.range)
-                    .await
-                    .map(|_| None)
+                let image_scanner = self.component_factory.image_scanner().map_err(|e| {
+                    Error::internal_error()
+                        .with_message(format!("unable to create image scanner: {e}"))
+                })?;
+                let image_builder = self.component_factory.image_builder().map_err(|e| {
+                    Error::internal_error()
+                        .with_message(format!("unable to create image builder: {e}"))
+                })?;
+                let mut command = BuildAndScanCommand::new(
+                    &image_builder,
+                    &image_scanner,
+                    &self.interactor,
+                    location,
+                );
+                command.execute().await.map(|_| None)
             }
         };
 
         match result {
             Ok(_) => result,
             Err(mut e) => {
-                self.command_executor
+                self.interactor
                     .show_message(MessageType::ERROR, e.to_string().as_str())
                     .await;
                 e.message = format!("error calling command: '{command}': {e}").into();
@@ -223,53 +232,4 @@ where
     pub async fn shutdown(&self) -> Result<()> {
         Ok(())
     }
-}
-
-async fn execute_command_scan_base_image<C: LSPClient>(
-    server: &mut LSPServerInner<C>,
-    file: String,
-    range: Range,
-    image: String,
-) -> Result<()> {
-    let image_scanner = {
-        server.component_factory.image_scanner().map_err(|e| {
-            Error::internal_error().with_message(format!("unable to create image scanner: {e}"))
-        })?
-    };
-
-    server
-        .command_executor
-        .scan_image(&file, range, &image, &image_scanner)
-        .await?;
-
-    Ok(())
-}
-
-async fn execute_command_build_and_scan<C: LSPClient>(
-    server: &mut LSPServerInner<C>,
-    file: String,
-    range: Range,
-) -> Result<()> {
-    let (image_scanner, image_builder) = {
-        let image_scanner = server.component_factory.image_scanner().map_err(|e| {
-            Error::internal_error().with_message(format!("unable to create image scanner: {e}"))
-        })?;
-        let image_builder = server.component_factory.image_builder().map_err(|e| {
-            Error::internal_error().with_message(format!("unable to create image builder: {e}"))
-        })?;
-
-        (image_scanner, image_builder)
-    };
-
-    server
-        .command_executor
-        .build_and_scan_from_file(
-            &PathBuf::from_str(&file).unwrap(),
-            range.start.line,
-            &image_builder,
-            &image_scanner,
-        )
-        .await?;
-
-    Ok(())
 }
