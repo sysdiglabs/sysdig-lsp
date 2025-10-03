@@ -347,21 +347,76 @@ async fn test_execute_command(
 #[rstest]
 #[awt]
 #[tokio::test]
-async fn test_hover(#[future] server_with_open_file: TestSetup, open_file_url: Url) {
+async fn test_hover(
+    #[future] server_with_open_file: TestSetup,
+    open_file_url: Url,
+    scan_result: ScanResult,
+) {
+    // Given
+    server_with_open_file
+        .component_factory
+        .image_scanner
+        .lock()
+        .await
+        .expect_scan_image()
+        .with(mockall::predicate::eq("alpine"))
+        .times(1)
+        .returning(move |_| Ok(scan_result.clone()));
+
+    let params = ExecuteCommandParams {
+        command: "sysdig-lsp.execute-scan".to_string(),
+        arguments: vec![
+            json!({"range":{"end":{"character":11,"line":0},"start":{"character": 0,"line":0}},"uri":open_file_url.clone()}),
+            json!("alpine"),
+        ],
+        work_done_progress_params: WorkDoneProgressParams::default(),
+    };
+    let result = server_with_open_file.server.execute_command(params).await;
+    assert!(result.is_ok());
+
+    // When
     let params = HoverParams {
         text_document_position_params: TextDocumentPositionParams {
             text_document: TextDocumentIdentifier::new(open_file_url),
-            position: Position::new(0, 0),
+            position: Position::new(0, 5), // Position inside "alpine"
         },
         work_done_progress_params: WorkDoneProgressParams::default(),
     };
     let result = server_with_open_file.server.hover(params).await;
     assert!(result.is_ok());
     let hover = result.unwrap().unwrap();
+
+    // Then
+    let expected_markdown = r#"## Sysdig Scan Result
+### Summary
+* **PullString**: alpine:latest
+* **ImageID**: `sha256:12345`
+* **Digest**: `sha256:67890`
+* **BaseOS**: alpine:3.18
+
+| TOTAL VULNS FOUND | CRITICAL | HIGH        | MEDIUM | LOW | NEGLIGIBLE |
+| :-------------: | :----: | :---------: | :--: | :-: | :------: |
+| 1               | 0      | 1 (1 Fixable) | 0    | 0   | 0        |
+
+
+### Fixable Packages
+| PACKAGE | TYPE | VERSION | SUGGESTED FIX | CRITICAL | HIGH | MEDIUM | LOW | NEGLIGIBLE | EXPLOIT |
+| :----- | :-: | :---- | :---------- | :----: | :-: | :--: | :-: | :------: | :---: |
+| package1 | os  | 1.0.0 | 1.0.1       | -      | 1   | -    | -   | -        | -     |
+
+
+
+### Vulnerability Detail
+
+| VULN CVE    | SEVERITY | PACKAGES | FIXABLE | EXPLOITABLE | ACCEPTED RISK |
+| :---------- | :----- | :----- | :---- | :-------- | :---------- |
+| CVE-2021-1234 | High   | 1      | ✅    | ❌        | ❌          |
+"#;
+
     let expected_json = serde_json::json!({
         "contents": {
             "kind": "markdown",
-            "value": "## Sysdig Scan Result\n### Summary\n* **Type**: dockerImage\n* **PullString**: ubuntu:23.04\n* **ImageID**: `sha256:f4cdeba72b994748f5eb1f525a70a9cc553b66037ec37e23645fbf3f0f5c160d`\n* **Digest**: `sha256:5a828e28de105c3d7821c4442f0f5d1c52dc16acf4999d5f31a3bc0f03f06edd`\n* **BaseOS**: ubuntu 23.04\n\n| TOTAL VULNS FOUND  | CRITICAL | HIGH | MEDIUM         | LOW            | NEGLIGIBLE |\n|:------------------:|:--------:|:----:|:--------------:|:--------------:|:----------:|\n| 11                 | 0        | 0    | 9 (9 Fixable)  | 2 (2 Fixable)  | 0          |\n\n### Fixable Packages\n| PACKAGE            | TYPE | VERSION                | SUGGESTED FIX          | CRITICAL | HIGH | MEDIUM | LOW | NEGLIGIBLE | EXPLOIT |\n|:-------------------|:----:|:-----------------------|:-----------------------|:--------:|:----:|:------:|:---:|:----------:|:-------:|\n| libgnutls30        | os   | 3.7.8-5ubuntu1.1       | 3.7.8-5ubuntu1.2       | -        | -    | 2      | -   | -          | -       |\n| libc-bin           | os   | 2.37-0ubuntu2.1        | 2.37-0ubuntu2.2        | -        | -    | 1      | 1   | -          | -       |\n| libc6              | os   | 2.37-0ubuntu2.1        | 2.37-0ubuntu2.2        | -        | -    | 1      | 1   | -          | -       |\n| libpam-modules     | os   | 1.5.2-5ubuntu1         | 1.5.2-5ubuntu1.1       | -        | -    | 1      | -   | -          | -       |\n| libpam-modules-bin | os   | 1.5.2-5ubuntu1         | 1.5.2-5ubuntu1.1       | -        | -    | 1      | -   | -          | -       |\n| libpam-runtime     | os   | 1.5.2-5ubuntu1         | 1.5.2-5ubuntu1.1       | -        | -    | 1      | -   | -          | -       |\n| libpam0g           | os   | 1.5.2-5ubuntu1         | 1.5.2-5ubuntu1.1       | -        | -    | 1      | -   | -          | -       |\n| tar                | os   | 1.34+dfsg-1.2ubuntu0.1 | 1.34+dfsg-1.2ubuntu0.2 | -        | -    | 1      | -   | -          | -       |\n\n### Policy Evaluation\n\n| POLICY                                | STATUS | FAILURES | RISKS ACCEPTED |\n|:--------------------------------------|:------:|:--------:|:--------------:|\n| carholder policy - pk                 | ❌     | 1        | 0              |\n| Critical Vulnerability Found          | ✅     | 0        | 0              |\n| Forbid Secrets in Images              | ✅     | 0        | 0              |\n| NIST SP 800-Star                      | ❌     | 14       | 0              |\n| PolicyCardHolder                      | ❌     | 1        | 0              |\n| Sensitive Information or Secret Found | ✅     | 0        | 0              |\n| Sysdig Best Practices                 | ✅     | 0        | 0              |\n\n### Vulnerability Detail\n\n| VULN CVE      | SEVERITY | PACKAGES | FIXABLE | EXPLOITABLE | ACCEPTED RISK | AGE         |\n|---------------|----------|----------|---------|-------------|---------------|-------------|\n| CVE-2024-22365| Medium   | 4        | ✅      | ❌          | ❌            | 2 years ago |\n| CVE-2023-5156 | Medium   | 2        | ✅      | ❌          | ❌            | 2 years ago |\n| CVE-2023-39804| Medium   | 1        | ✅      | ❌          | ❌            | 2 years ago |\n| CVE-2024-0553 | Medium   | 1        | ✅      | ❌          | ❌            | 2 years ago |\n| CVE-2024-0567 | Medium   | 1        | ✅      | ❌          | ❌            | 2 years ago |\n| CVE-2023-4806 | Low      | 2        | ✅      | ❌          | ❌            | 2 years ago |\n"
+            "value": expected_markdown.to_string()
         }
     });
     assert_eq!(serde_json::to_value(hover).unwrap(), expected_json);

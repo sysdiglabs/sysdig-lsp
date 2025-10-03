@@ -2,7 +2,9 @@ use itertools::Itertools;
 use tower_lsp::lsp_types::{Diagnostic, DiagnosticSeverity, Location, MessageType};
 
 use crate::{
-    app::{ImageScanner, LSPClient, LspInteractor, lsp_server::WithContext},
+    app::{
+        ImageScanner, LSPClient, LspInteractor, lsp_server::WithContext, markdown::MarkdownData,
+    },
     domain::scanresult::severity::Severity,
 };
 
@@ -103,6 +105,14 @@ where
         self.interactor
             .append_document_diagnostics(uri, &[diagnostic])
             .await;
-        self.interactor.publish_all_diagnostics().await
+        self.interactor.publish_all_diagnostics().await?;
+        self.interactor
+            .append_documentation(
+                self.location.uri.as_str(),
+                self.location.range,
+                MarkdownData::from(scan_result).to_string(),
+            )
+            .await;
+        Ok(())
     }
 }

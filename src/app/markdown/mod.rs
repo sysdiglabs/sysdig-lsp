@@ -199,7 +199,6 @@ impl MarkdownData {
             Heading::new("FIXABLE".to_string(), Some(HeadingAlignment::Left)),
             Heading::new("EXPLOITABLE".to_string(), Some(HeadingAlignment::Left)),
             Heading::new("ACCEPTED RISK".to_string(), Some(HeadingAlignment::Left)),
-            Heading::new("AGE".to_string(), Some(HeadingAlignment::Left)),
         ];
 
         let data = self
@@ -213,7 +212,6 @@ impl MarkdownData {
                     if v.fixable { "✅" } else { "❌" }.to_string(),
                     if v.exploitable { "✅" } else { "❌" }.to_string(),
                     if v.accepted_risk { "✅" } else { "❌" }.to_string(),
-                    v.age.to_string(),
                 ]
             })
             .collect();
@@ -328,6 +326,8 @@ fn policies_from(value: &ScanResult) -> Vec<PolicyEvaluated> {
             failures: p.bundles().iter().map(|b| b.rules().len()).sum::<usize>() as u32,
             risks_accepted: 0, // Cannot determine this from the current data model
         })
+        .sorted_by(|a, b| b.failures.cmp(&a.failures))
+        .sorted_by_key(|p| p.passed)
         .collect()
 }
 
@@ -335,6 +335,15 @@ fn vulnerabilities_from(value: &ScanResult) -> Vec<VulnerabilityEvaluated> {
     value
         .vulnerabilities()
         .iter()
+        .sorted_by_key(|v| v.cve())
+        .sorted_by(|a, b| {
+            b.found_in_packages()
+                .len()
+                .cmp(&a.found_in_packages().len())
+        })
+        .sorted_by(|a, b| b.fixable().cmp(&a.fixable()))
+        .sorted_by(|a, b| b.exploitable().cmp(&a.exploitable()))
+        .sorted_by_key(|v| v.severity())
         .map(|v| VulnerabilityEvaluated {
             cve: v.cve().to_string(),
             severity: v.severity().to_string(),
@@ -342,9 +351,7 @@ fn vulnerabilities_from(value: &ScanResult) -> Vec<VulnerabilityEvaluated> {
             fixable: v.fixable(),
             exploitable: v.exploitable(),
             accepted_risk: !v.accepted_risks().is_empty(),
-            age: "N/A", // Calculating age requires current time, which is not ideal here.
         })
-        .sorted_by(|a, b| a.cve.cmp(&b.cve))
         .collect()
 }
 
@@ -415,7 +422,6 @@ pub struct VulnerabilityEvaluated {
     pub fixable: bool,
     pub exploitable: bool,
     pub accepted_risk: bool,
-    pub age: &'static str,
 }
 
 #[cfg(test)]
@@ -614,7 +620,6 @@ mod test {
                     fixable: true,
                     exploitable: false,
                     accepted_risk: false,
-                    age: "2 years ago",
                 },
                 VulnerabilityEvaluated {
                     cve: "CVE-2023-4806".to_string(),
@@ -623,7 +628,6 @@ mod test {
                     fixable: true,
                     exploitable: false,
                     accepted_risk: false,
-                    age: "2 years ago",
                 },
                 VulnerabilityEvaluated {
                     cve: "CVE-2023-5156".to_string(),
@@ -632,7 +636,6 @@ mod test {
                     fixable: true,
                     exploitable: false,
                     accepted_risk: false,
-                    age: "2 years ago",
                 },
                 VulnerabilityEvaluated {
                     cve: "CVE-2024-0553".to_string(),
@@ -641,7 +644,6 @@ mod test {
                     fixable: true,
                     exploitable: false,
                     accepted_risk: false,
-                    age: "2 years ago",
                 },
                 VulnerabilityEvaluated {
                     cve: "CVE-2024-0567".to_string(),
@@ -650,7 +652,6 @@ mod test {
                     fixable: true,
                     exploitable: false,
                     accepted_risk: false,
-                    age: "2 years ago",
                 },
                 VulnerabilityEvaluated {
                     cve: "CVE-2024-22365".to_string(),
@@ -659,7 +660,6 @@ mod test {
                     fixable: true,
                     exploitable: false,
                     accepted_risk: false,
-                    age: "2 years ago",
                 },
             ],
         };
@@ -703,14 +703,14 @@ mod test {
 
 ### Vulnerability Detail
 
-| VULN CVE     | SEVERITY | PACKAGES | FIXABLE | EXPLOITABLE | ACCEPTED RISK | AGE       |
-| :----------- | :----- | :----- | :---- | :-------- | :---------- | :-------- |
-| CVE-2023-39804 | Medium | 1      | ✅    | ❌        | ❌          | 2 years ago |
-| CVE-2023-4806 | Low    | 2      | ✅    | ❌        | ❌          | 2 years ago |
-| CVE-2023-5156 | Medium | 2      | ✅    | ❌        | ❌          | 2 years ago |
-| CVE-2024-0553 | Medium | 1      | ✅    | ❌        | ❌          | 2 years ago |
-| CVE-2024-0567 | Medium | 1      | ✅    | ❌        | ❌          | 2 years ago |
-| CVE-2024-22365 | Medium | 4      | ✅    | ❌        | ❌          | 2 years ago |"#;
+| VULN CVE     | SEVERITY | PACKAGES | FIXABLE | EXPLOITABLE | ACCEPTED RISK |
+| :----------- | :----- | :----- | :---- | :-------- | :---------- |
+| CVE-2023-39804 | Medium | 1      | ✅    | ❌        | ❌          |
+| CVE-2023-4806 | Low    | 2      | ✅    | ❌        | ❌          |
+| CVE-2023-5156 | Medium | 2      | ✅    | ❌        | ❌          |
+| CVE-2024-0553 | Medium | 1      | ✅    | ❌        | ❌          |
+| CVE-2024-0567 | Medium | 1      | ✅    | ❌        | ❌          |
+| CVE-2024-22365 | Medium | 4      | ✅    | ❌        | ❌          |"#;
 
         assert_eq!(
             markdown_data.to_string().trim(),

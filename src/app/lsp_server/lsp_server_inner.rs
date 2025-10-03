@@ -1,12 +1,14 @@
 use serde_json::Value;
 use tower_lsp::jsonrpc::{Error, ErrorCode, Result};
+use tower_lsp::lsp_types::HoverContents::Markup;
+use tower_lsp::lsp_types::MarkupKind::Markdown;
 use tower_lsp::lsp_types::{
     CodeActionOrCommand, CodeActionParams, CodeActionProviderCapability, CodeActionResponse,
     CodeLens, CodeLensOptions, CodeLensParams, DidChangeConfigurationParams,
     DidChangeTextDocumentParams, DidOpenTextDocumentParams, ExecuteCommandOptions,
-    ExecuteCommandParams, HoverProviderCapability, InitializeParams, InitializeResult,
-    InitializedParams, MessageType, ServerCapabilities, TextDocumentSyncCapability,
-    TextDocumentSyncKind,
+    ExecuteCommandParams, Hover, HoverParams, HoverProviderCapability, InitializeParams,
+    InitializeResult, InitializedParams, MarkupContent, MessageType, ServerCapabilities,
+    TextDocumentSyncCapability, TextDocumentSyncKind,
 };
 use tracing::{debug, info};
 
@@ -228,6 +230,32 @@ where
             Ok(_) => Ok(None),
             Err(e) => Err(self.handle_command_error(&command_name, e).await),
         }
+    }
+
+    pub async fn hover(&self, params: HoverParams) -> Result<Option<Hover>> {
+        let documentation_found = self
+            .interactor
+            .read_documentation_at(
+                params
+                    .text_document_position_params
+                    .text_document
+                    .uri
+                    .as_str(),
+                params.text_document_position_params.position,
+            )
+            .await;
+
+        if documentation_found.is_none() {
+            return Ok(None);
+        }
+
+        Ok(Some(Hover {
+            contents: Markup(MarkupContent {
+                kind: Markdown,
+                value: documentation_found.unwrap(),
+            }),
+            range: None,
+        }))
     }
 
     pub async fn shutdown(&self) -> Result<()> {

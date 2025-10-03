@@ -1,7 +1,7 @@
 use std::{collections::HashMap, sync::Arc};
 
 use tokio::sync::RwLock;
-use tower_lsp::lsp_types::Diagnostic;
+use tower_lsp::lsp_types::{Diagnostic, Position, Range};
 
 #[derive(Default, Debug, Clone)]
 pub struct InMemoryDocumentDatabase {
@@ -12,6 +12,13 @@ pub struct InMemoryDocumentDatabase {
 struct Document {
     pub text: String,
     pub diagnostics: Vec<Diagnostic>,
+    pub documentations: Vec<Documentation>,
+}
+
+#[derive(Default, Debug, Clone)]
+struct Documentation {
+    pub range: Range,
+    pub content: String,
 }
 
 impl InMemoryDocumentDatabase {
@@ -70,6 +77,46 @@ impl InMemoryDocumentDatabase {
         hash_map
             .into_iter()
             .map(|(uri, doc)| (uri, doc.diagnostics))
+    }
+
+    pub async fn append_documentation(&self, uri: &str, range: Range, documentation: String) {
+        self.documents
+            .write()
+            .await
+            .entry(uri.into())
+            .and_modify(|d| {
+                d.documentations.push(Documentation {
+                    range,
+                    content: documentation.clone(),
+                })
+            })
+            .or_insert_with(|| Document {
+                documentations: vec![Documentation {
+                    range,
+                    content: documentation,
+                }],
+                ..Default::default()
+            });
+    }
+
+    pub async fn read_documentation_at(&self, uri: &str, position: Position) -> Option<String> {
+        let documents = self.documents.read().await;
+        let document_asked_for = documents.get(uri);
+        let mut documentations_for_document = document_asked_for
+            .iter()
+            .flat_map(|d| d.documentations.iter());
+        let first_documentation_in_range = documentations_for_document.find(|documentation| {
+            position > documentation.range.start && position < documentation.range.end
+        });
+
+        first_documentation_in_range.map(|d| d.content.clone())
+    }
+
+    pub async fn remove_documentations(&self, uri: &str) {
+        let mut documents = self.documents.write().await;
+        if let Some(document_asked_for) = documents.get_mut(uri) {
+            document_asked_for.documentations.clear();
+        };
     }
 }
 

@@ -90,63 +90,8 @@ where
         self.inner.read().await.execute_command(params).await
     }
 
-    async fn hover(&self, _params: HoverParams) -> Result<Option<Hover>> {
-        Ok(Some(Hover {
-            contents: tower_lsp::lsp_types::HoverContents::Markup(
-                tower_lsp::lsp_types::MarkupContent {
-                    kind: tower_lsp::lsp_types::MarkupKind::Markdown,
-                    value: "## Sysdig Scan Result
-### Summary
-* **Type**: dockerImage
-* **PullString**: ubuntu:23.04
-* **ImageID**: `sha256:f4cdeba72b994748f5eb1f525a70a9cc553b66037ec37e23645fbf3f0f5c160d`
-* **Digest**: `sha256:5a828e28de105c3d7821c4442f0f5d1c52dc16acf4999d5f31a3bc0f03f06edd`
-* **BaseOS**: ubuntu 23.04
-
-| TOTAL VULNS FOUND  | CRITICAL | HIGH | MEDIUM         | LOW            | NEGLIGIBLE |
-|:------------------:|:--------:|:----:|:--------------:|:--------------:|:----------:|
-| 11                 | 0        | 0    | 9 (9 Fixable)  | 2 (2 Fixable)  | 0          |
-
-### Fixable Packages
-| PACKAGE            | TYPE | VERSION                | SUGGESTED FIX          | CRITICAL | HIGH | MEDIUM | LOW | NEGLIGIBLE | EXPLOIT |
-|:-------------------|:----:|:-----------------------|:-----------------------|:--------:|:----:|:------:|:---:|:----------:|:-------:|
-| libgnutls30        | os   | 3.7.8-5ubuntu1.1       | 3.7.8-5ubuntu1.2       | -        | -    | 2      | -   | -          | -       |
-| libc-bin           | os   | 2.37-0ubuntu2.1        | 2.37-0ubuntu2.2        | -        | -    | 1      | 1   | -          | -       |
-| libc6              | os   | 2.37-0ubuntu2.1        | 2.37-0ubuntu2.2        | -        | -    | 1      | 1   | -          | -       |
-| libpam-modules     | os   | 1.5.2-5ubuntu1         | 1.5.2-5ubuntu1.1       | -        | -    | 1      | -   | -          | -       |
-| libpam-modules-bin | os   | 1.5.2-5ubuntu1         | 1.5.2-5ubuntu1.1       | -        | -    | 1      | -   | -          | -       |
-| libpam-runtime     | os   | 1.5.2-5ubuntu1         | 1.5.2-5ubuntu1.1       | -        | -    | 1      | -   | -          | -       |
-| libpam0g           | os   | 1.5.2-5ubuntu1         | 1.5.2-5ubuntu1.1       | -        | -    | 1      | -   | -          | -       |
-| tar                | os   | 1.34+dfsg-1.2ubuntu0.1 | 1.34+dfsg-1.2ubuntu0.2 | -        | -    | 1      | -   | -          | -       |
-
-### Policy Evaluation
-
-| POLICY                                | STATUS | FAILURES | RISKS ACCEPTED |
-|:--------------------------------------|:------:|:--------:|:--------------:|
-| carholder policy - pk                 | ❌     | 1        | 0              |
-| Critical Vulnerability Found          | ✅     | 0        | 0              |
-| Forbid Secrets in Images              | ✅     | 0        | 0              |
-| NIST SP 800-Star                      | ❌     | 14       | 0              |
-| PolicyCardHolder                      | ❌     | 1        | 0              |
-| Sensitive Information or Secret Found | ✅     | 0        | 0              |
-| Sysdig Best Practices                 | ✅     | 0        | 0              |
-
-### Vulnerability Detail
-
-| VULN CVE      | SEVERITY | PACKAGES | FIXABLE | EXPLOITABLE | ACCEPTED RISK | AGE         |
-|---------------|----------|----------|---------|-------------|---------------|-------------|
-| CVE-2024-22365| Medium   | 4        | ✅      | ❌          | ❌            | 2 years ago |
-| CVE-2023-5156 | Medium   | 2        | ✅      | ❌          | ❌            | 2 years ago |
-| CVE-2023-39804| Medium   | 1        | ✅      | ❌          | ❌            | 2 years ago |
-| CVE-2024-0553 | Medium   | 1        | ✅      | ❌          | ❌            | 2 years ago |
-| CVE-2024-0567 | Medium   | 1        | ✅      | ❌          | ❌            | 2 years ago |
-| CVE-2023-4806 | Low      | 2        | ✅      | ❌          | ❌            | 2 years ago |
-"
-                    .to_string(),
-                },
-            ),
-            range: None,
-        }))
+    async fn hover(&self, params: HoverParams) -> Result<Option<Hover>> {
+        self.inner.read().await.hover(params).await
     }
 
     async fn shutdown(&self) -> Result<()> {
