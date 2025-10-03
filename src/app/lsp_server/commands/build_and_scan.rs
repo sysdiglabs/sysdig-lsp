@@ -6,6 +6,7 @@ use tower_lsp::lsp_types::{
     Diagnostic, DiagnosticSeverity, Location, MessageType, Position, Range,
 };
 
+use crate::app::markdown::{MarkdownData, MarkdownLayerData};
 use crate::{
     app::{ImageBuilder, ImageScanner, LSPClient, LspInteractor, lsp_server::WithContext},
     domain::scanresult::{layer::Layer, scan_result::ScanResult, severity::Severity},
@@ -108,7 +109,8 @@ where
             .await;
 
         let diagnostic = diagnostic_for_image(line, &document_text, &scan_result);
-        let diagnostics_per_layer = diagnostics_for_layers(&document_text, &scan_result)?;
+        let (diagnostics_per_layer, docs_per_layer) =
+            diagnostics_for_layers(&document_text, &scan_result)?;
 
         self.interactor.remove_diagnostics(uri).await;
         self.interactor
@@ -117,14 +119,26 @@ where
         self.interactor
             .append_document_diagnostics(uri, &diagnostics_per_layer)
             .await;
+        self.interactor
+            .append_documentation(
+                uri,
+                self.location.range,
+                MarkdownData::from(scan_result).to_string(),
+            )
+            .await;
+        for (range, docs) in docs_per_layer {
+            self.interactor.append_documentation(uri, range, docs).await;
+        }
         self.interactor.publish_all_diagnostics().await
     }
 }
 
+pub type LayerScanResult = (Vec<Diagnostic>, Vec<(Range, String)>);
+
 pub fn diagnostics_for_layers(
     document_text: &str,
     scan_result: &ScanResult,
-) -> Result<Vec<Diagnostic>> {
+) -> Result<LayerScanResult> {
     let instructions = parse_dockerfile(document_text);
     let layers = &scan_result.layers();
 
@@ -132,6 +146,7 @@ pub fn diagnostics_for_layers(
     let mut layer_idx = layers.len().checked_sub(1);
 
     let mut diagnostics = Vec::new();
+    let mut docs = Vec::new();
 
     while let (Some(i), Some(l)) = (instr_idx, layer_idx) {
         let instr = &instructions[i];
@@ -162,12 +177,16 @@ pub fn diagnostics_for_layers(
             };
 
             diagnostics.push(diagnostic);
+            docs.push((
+                instr.range,
+                MarkdownLayerData::from(layer.clone()).to_string(),
+            ));
 
             fill_vulnerability_hints_for_layer(layer, instr.range, &mut diagnostics)
         }
     }
 
-    Ok(diagnostics)
+    Ok((diagnostics, docs))
 }
 
 fn fill_vulnerability_hints_for_layer(

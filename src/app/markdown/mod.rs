@@ -7,3 +7,4 @@ mod markdown_summary_table;
 mod markdown_vulnerability_evaluated_table;
 
 pub use markdown_data::MarkdownData;
+pub use markdown_layer_data::MarkdownLayerData;
