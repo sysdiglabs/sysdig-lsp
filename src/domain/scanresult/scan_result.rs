@@ -658,8 +658,8 @@ mod tests {
         // Add layer twice
         let layer = scan_result.add_layer("layer-1".to_string(), 0, None, "CMD".to_string());
         let layer2 = scan_result.add_layer("layer-1".to_string(), 0, None, "CMD".to_string());
-        assert_ne!(Arc::as_ptr(&layer), Arc::as_ptr(&layer2)); // It creates a new Arc and replaces.
-        assert_eq!(scan_result.layers().len(), 1);
+        assert_ne!(Arc::as_ptr(&layer), Arc::as_ptr(&layer2)); // It creates a new Arc and adds it.
+        assert_eq!(scan_result.layers().len(), 2);
 
         // Add package twice
         let pkg = scan_result.add_package(
