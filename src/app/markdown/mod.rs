@@ -1,6 +1,8 @@
 use crate::domain::scanresult::scan_result::ScanResult;
 use crate::domain::scanresult::severity::Severity;
 use itertools::Itertools;
+use markdown_table::{Heading, HeadingAlignment, MarkdownTable};
+use std::fmt::{Display, Formatter};
 
 impl From<ScanResult> for MarkdownData {
     fn from(value: ScanResult) -> Self {
@@ -10,6 +12,219 @@ impl From<ScanResult> for MarkdownData {
             policies: policies_from(&value),
             vulnerabilities: vulnerabilities_from(&value),
         }
+    }
+}
+
+impl Display for MarkdownData {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let summary_section = self.summary_section();
+        let fixable_packages_section = self.fixable_packages_section();
+        let policy_evaluation_section = self.policy_evaluation_section();
+        let vulnerability_detail_section = self.vulnerability_detail_section();
+
+        write!(
+            f,
+            "## Sysdig Scan Result\n{}\n{}\n{}\n{}",
+            summary_section,
+            fixable_packages_section,
+            policy_evaluation_section,
+            vulnerability_detail_section
+        )
+    }
+}
+
+impl MarkdownData {
+    fn summary_vulns_line(&self, total_vulns: u32, fixable_vulns: u32) -> String {
+        if fixable_vulns > 0 {
+            format!("{} ({} Fixable)", total_vulns, fixable_vulns)
+        } else {
+            total_vulns.to_string()
+        }
+    }
+
+    fn summary_section(&self) -> String {
+        let summary = &self.summary;
+        let total_vulns_found = &summary.total_vulns_found;
+
+        let headers = vec![
+            Heading::new(
+                "TOTAL VULNS FOUND".to_string(),
+                Some(HeadingAlignment::Center),
+            ),
+            Heading::new("CRITICAL".to_string(), Some(HeadingAlignment::Center)),
+            Heading::new("HIGH".to_string(), Some(HeadingAlignment::Center)),
+            Heading::new("MEDIUM".to_string(), Some(HeadingAlignment::Center)),
+            Heading::new("LOW".to_string(), Some(HeadingAlignment::Center)),
+            Heading::new("NEGLIGIBLE".to_string(), Some(HeadingAlignment::Center)),
+        ];
+
+        let data = vec![vec![
+            total_vulns_found.total_found.to_string(),
+            self.summary_vulns_line(
+                total_vulns_found.critical,
+                total_vulns_found.critical_fixable,
+            ),
+            self.summary_vulns_line(total_vulns_found.high, total_vulns_found.high_fixable),
+            self.summary_vulns_line(total_vulns_found.medium, total_vulns_found.medium_fixable),
+            self.summary_vulns_line(total_vulns_found.low, total_vulns_found.low_fixable),
+            self.summary_vulns_line(
+                total_vulns_found.negligible,
+                total_vulns_found.negligible_fixable,
+            ),
+        ]];
+
+        let mut table = MarkdownTable::new(data);
+        table.with_headings(headers);
+
+        format!(
+            "### Summary\n* **PullString**: {}\n* **ImageID**: `{}`\n* **Digest**: `{}`\n* **BaseOS**: {}\n\n{}",
+            summary.pull_string,
+            summary.image_id,
+            summary.digest,
+            summary.base_os,
+            table.as_markdown().unwrap_or_default()
+        )
+    }
+
+    fn fixable_packages_section(&self) -> String {
+        if self.fixable_packages.is_empty() {
+            return "".to_string();
+        }
+        let headers = vec![
+            Heading::new("PACKAGE".to_string(), Some(HeadingAlignment::Left)),
+            Heading::new("TYPE".to_string(), Some(HeadingAlignment::Center)),
+            Heading::new("VERSION".to_string(), Some(HeadingAlignment::Left)),
+            Heading::new("SUGGESTED FIX".to_string(), Some(HeadingAlignment::Left)),
+            Heading::new("CRITICAL".to_string(), Some(HeadingAlignment::Center)),
+            Heading::new("HIGH".to_string(), Some(HeadingAlignment::Center)),
+            Heading::new("MEDIUM".to_string(), Some(HeadingAlignment::Center)),
+            Heading::new("LOW".to_string(), Some(HeadingAlignment::Center)),
+            Heading::new("NEGLIGIBLE".to_string(), Some(HeadingAlignment::Center)),
+            Heading::new("EXPLOIT".to_string(), Some(HeadingAlignment::Center)),
+        ];
+
+        let data = self
+            .fixable_packages
+            .iter()
+            .map(|p| {
+                vec![
+                    p.name.clone(),
+                    p.package_type.clone(),
+                    p.version.clone(),
+                    p.suggested_fix.clone().unwrap_or_default(),
+                    if p.vulnerabilities.critical > 0 {
+                        p.vulnerabilities.critical.to_string()
+                    } else {
+                        "-".to_string()
+                    },
+                    if p.vulnerabilities.high > 0 {
+                        p.vulnerabilities.high.to_string()
+                    } else {
+                        "-".to_string()
+                    },
+                    if p.vulnerabilities.medium > 0 {
+                        p.vulnerabilities.medium.to_string()
+                    } else {
+                        "-".to_string()
+                    },
+                    if p.vulnerabilities.low > 0 {
+                        p.vulnerabilities.low.to_string()
+                    } else {
+                        "-".to_string()
+                    },
+                    if p.vulnerabilities.negligible > 0 {
+                        p.vulnerabilities.negligible.to_string()
+                    } else {
+                        "-".to_string()
+                    },
+                    if p.exploits > 0 {
+                        p.exploits.to_string()
+                    } else {
+                        "-".to_string()
+                    },
+                ]
+            })
+            .collect();
+
+        let mut table = MarkdownTable::new(data);
+        table.with_headings(headers);
+
+        format!(
+            "\n### Fixable Packages\n{}",
+            table.as_markdown().unwrap_or_default()
+        )
+    }
+
+    fn policy_evaluation_section(&self) -> String {
+        if self.policies.is_empty() {
+            return "".to_string();
+        }
+        let headers = vec![
+            Heading::new("POLICY".to_string(), Some(HeadingAlignment::Left)),
+            Heading::new("STATUS".to_string(), Some(HeadingAlignment::Center)),
+            Heading::new("FAILURES".to_string(), Some(HeadingAlignment::Center)),
+            Heading::new("RISKS ACCEPTED".to_string(), Some(HeadingAlignment::Center)),
+        ];
+
+        let data = self
+            .policies
+            .iter()
+            .map(|p| {
+                vec![
+                    p.name.clone(),
+                    if p.passed { "✅" } else { "❌" }.to_string(),
+                    p.failures.to_string(),
+                    p.risks_accepted.to_string(),
+                ]
+            })
+            .collect();
+
+        let mut table = MarkdownTable::new(data);
+        table.with_headings(headers);
+
+        format!(
+            "\n### Policy Evaluation\n\n{}",
+            table.as_markdown().unwrap_or_default()
+        )
+    }
+
+    fn vulnerability_detail_section(&self) -> String {
+        if self.vulnerabilities.is_empty() {
+            return "".to_string();
+        }
+        let headers = vec![
+            Heading::new("VULN CVE".to_string(), Some(HeadingAlignment::Left)),
+            Heading::new("SEVERITY".to_string(), Some(HeadingAlignment::Left)),
+            Heading::new("PACKAGES".to_string(), Some(HeadingAlignment::Left)),
+            Heading::new("FIXABLE".to_string(), Some(HeadingAlignment::Left)),
+            Heading::new("EXPLOITABLE".to_string(), Some(HeadingAlignment::Left)),
+            Heading::new("ACCEPTED RISK".to_string(), Some(HeadingAlignment::Left)),
+            Heading::new("AGE".to_string(), Some(HeadingAlignment::Left)),
+        ];
+
+        let data = self
+            .vulnerabilities
+            .iter()
+            .map(|v| {
+                vec![
+                    v.cve.clone(),
+                    v.severity.clone(),
+                    v.packages_found.to_string(),
+                    if v.fixable { "✅" } else { "❌" }.to_string(),
+                    if v.exploitable { "✅" } else { "❌" }.to_string(),
+                    if v.accepted_risk { "✅" } else { "❌" }.to_string(),
+                    v.age.to_string(),
+                ]
+            })
+            .collect();
+
+        let mut table = MarkdownTable::new(data);
+        table.with_headings(headers);
+
+        format!(
+            "\n### Vulnerability Detail\n\n{}",
+            table.as_markdown().unwrap_or_default()
+        )
     }
 }
 
@@ -393,9 +608,18 @@ mod test {
 
             vulnerabilities: vec![
                 VulnerabilityEvaluated {
-                    cve: "CVE-2024-22365".to_string(),
+                    cve: "CVE-2023-39804".to_string(),
                     severity: "Medium".to_string(),
-                    packages_found: 4,
+                    packages_found: 1,
+                    fixable: true,
+                    exploitable: false,
+                    accepted_risk: false,
+                    age: "2 years ago",
+                },
+                VulnerabilityEvaluated {
+                    cve: "CVE-2023-4806".to_string(),
+                    severity: "Low".to_string(),
+                    packages_found: 2,
                     fixable: true,
                     exploitable: false,
                     accepted_risk: false,
@@ -405,15 +629,6 @@ mod test {
                     cve: "CVE-2023-5156".to_string(),
                     severity: "Medium".to_string(),
                     packages_found: 2,
-                    fixable: true,
-                    exploitable: false,
-                    accepted_risk: false,
-                    age: "2 years ago",
-                },
-                VulnerabilityEvaluated {
-                    cve: "CVE-2023-39804".to_string(),
-                    severity: "Medium".to_string(),
-                    packages_found: 1,
                     fixable: true,
                     exploitable: false,
                     accepted_risk: false,
@@ -438,9 +653,9 @@ mod test {
                     age: "2 years ago",
                 },
                 VulnerabilityEvaluated {
-                    cve: "CVE-2023-4806".to_string(),
-                    severity: "Low".to_string(),
-                    packages_found: 2,
+                    cve: "CVE-2024-22365".to_string(),
+                    severity: "Medium".to_string(),
+                    packages_found: 4,
                     fixable: true,
                     exploitable: false,
                     accepted_risk: false,
@@ -448,51 +663,58 @@ mod test {
                 },
             ],
         };
-        let expected_markdown_output = "## Sysdig Scan Result
+        let expected_markdown_output = r#"## Sysdig Scan Result
 ### Summary
 * **PullString**: ubuntu:23.04
 * **ImageID**: `sha256:f4cdeba72b994748f5eb1f525a70a9cc553b66037ec37e23645fbf3f0f5c160d`
 * **Digest**: `sha256:5a828e28de105c3d7821c4442f0f5d1c52dc16acf4999d5f31a3bc0f03f06edd`
 * **BaseOS**: ubuntu 23.04
 
-| TOTAL VULNS FOUND  | CRITICAL | HIGH | MEDIUM         | LOW            | NEGLIGIBLE |
-|:------------------:|:--------:|:----:|:--------------:|:--------------:|:----------:|
-| 11                 | 0        | 0    | 9 (9 Fixable)  | 2 (2 Fixable)  | 0          |
+| TOTAL VULNS FOUND | CRITICAL | HIGH | MEDIUM      | LOW         | NEGLIGIBLE |
+| :-------------: | :----: | :-: | :---------: | :---------: | :------: |
+| 11              | 0      | 0   | 9 (9 Fixable) | 2 (2 Fixable) | 0        |
+
 
 ### Fixable Packages
-| PACKAGE            | TYPE | VERSION                | SUGGESTED FIX          | CRITICAL | HIGH | MEDIUM | LOW | NEGLIGIBLE | EXPLOIT |
-|:-------------------|:----:|:-----------------------|:-----------------------|:--------:|:----:|:------:|:---:|:----------:|:-------:|
-| libgnutls30        | os   | 3.7.8-5ubuntu1.1       | 3.7.8-5ubuntu1.2       | -        | -    | 2      | -   | -          | -       |
-| libc-bin           | os   | 2.37-0ubuntu2.1        | 2.37-0ubuntu2.2        | -        | -    | 1      | 1   | -          | -       |
-| libc6              | os   | 2.37-0ubuntu2.1        | 2.37-0ubuntu2.2        | -        | -    | 1      | 1   | -          | -       |
-| libpam-modules     | os   | 1.5.2-5ubuntu1         | 1.5.2-5ubuntu1.1       | -        | -    | 1      | -   | -          | -       |
-| libpam-modules-bin | os   | 1.5.2-5ubuntu1         | 1.5.2-5ubuntu1.1       | -        | -    | 1      | -   | -          | -       |
-| libpam-runtime     | os   | 1.5.2-5ubuntu1         | 1.5.2-5ubuntu1.1       | -        | -    | 1      | -   | -          | -       |
-| libpam0g           | os   | 1.5.2-5ubuntu1         | 1.5.2-5ubuntu1.1       | -        | -    | 1      | -   | -          | -       |
-| tar                | os   | 1.34+dfsg-1.2ubuntu0.1 | 1.34+dfsg-1.2ubuntu0.2 | -        | -    | 1      | -   | -          | -       |
+| PACKAGE          | TYPE | VERSION              | SUGGESTED FIX        | CRITICAL | HIGH | MEDIUM | LOW | NEGLIGIBLE | EXPLOIT |
+| :--------------- | :-: | :------------------- | :------------------- | :----: | :-: | :--: | :-: | :------: | :---: |
+| libgnutls30      | os  | 3.7.8-5ubuntu1.1     | 3.7.8-5ubuntu1.2     | -      | -   | 2    | -   | -        | -     |
+| libc-bin         | os  | 2.37-0ubuntu2.1      | 2.37-0ubuntu2.2      | -      | -   | 1    | 1   | -        | -     |
+| libc6            | os  | 2.37-0ubuntu2.1      | 2.37-0ubuntu2.2      | -      | -   | 1    | 1   | -        | -     |
+| libpam-modules   | os  | 1.5.2-5ubuntu1       | 1.5.2-5ubuntu1.1     | -      | -   | 1    | -   | -        | -     |
+| libpam-modules-bin | os  | 1.5.2-5ubuntu1       | 1.5.2-5ubuntu1.1     | -      | -   | 1    | -   | -        | -     |
+| libpam-runtime   | os  | 1.5.2-5ubuntu1       | 1.5.2-5ubuntu1.1     | -      | -   | 1    | -   | -        | -     |
+| libpam0g         | os  | 1.5.2-5ubuntu1       | 1.5.2-5ubuntu1.1     | -      | -   | 1    | -   | -        | -     |
+| tar              | os  | 1.34+dfsg-1.2ubuntu0.1 | 1.34+dfsg-1.2ubuntu0.2 | -      | -   | 1    | -   | -        | -     |
+
 
 ### Policy Evaluation
 
-| POLICY                                | STATUS | FAILURES | RISKS ACCEPTED |
-|:--------------------------------------|:------:|:--------:|:--------------:|
-| carholder policy - pk                 | ❌     | 1        | 0              |
-| Critical Vulnerability Found          | ✅     | 0        | 0              |
-| Forbid Secrets in Images              | ✅     | 0        | 0              |
-| NIST SP 800-Star                      | ❌     | 14       | 0              |
-| PolicyCardHolder                      | ❌     | 1        | 0              |
-| Sensitive Information or Secret Found | ✅     | 0        | 0              |
-| Sysdig Best Practices                 | ✅     | 0        | 0              |
+| POLICY                              | STATUS | FAILURES | RISKS ACCEPTED |
+| :---------------------------------- | :--: | :----: | :----------: |
+| carholder policy - pk               | ❌   | 1      | 0            |
+| Critical Vulnerability Found        | ✅   | 0      | 0            |
+| Forbid Secrets in Images            | ✅   | 0      | 0            |
+| NIST SP 800-Star                    | ❌   | 14     | 0            |
+| PolicyCardHolder                    | ❌   | 1      | 0            |
+| Sensitive Information or Secret Found | ✅   | 0      | 0            |
+| Sysdig Best Practices               | ✅   | 0      | 0            |
+
 
 ### Vulnerability Detail
 
-| VULN CVE      | SEVERITY | PACKAGES | FIXABLE | EXPLOITABLE | ACCEPTED RISK | AGE         |
-|---------------|----------|----------|---------|-------------|---------------|-------------|
-| CVE-2024-22365| Medium   | 4        | ✅      | ❌          | ❌            | 2 years ago |
-| CVE-2023-5156 | Medium   | 2        | ✅      | ❌          | ❌            | 2 years ago |
-| CVE-2023-39804| Medium   | 1        | ✅      | ❌          | ❌            | 2 years ago |
-| CVE-2024-0553 | Medium   | 1        | ✅      | ❌          | ❌            | 2 years ago |
-| CVE-2024-0567 | Medium   | 1        | ✅      | ❌          | ❌            | 2 years ago |
-| CVE-2023-4806 | Low      | 2        | ✅      | ❌          | ❌            | 2 years ago |
-";
+| VULN CVE     | SEVERITY | PACKAGES | FIXABLE | EXPLOITABLE | ACCEPTED RISK | AGE       |
+| :----------- | :----- | :----- | :---- | :-------- | :---------- | :-------- |
+| CVE-2023-39804 | Medium | 1      | ✅    | ❌        | ❌          | 2 years ago |
+| CVE-2023-4806 | Low    | 2      | ✅    | ❌        | ❌          | 2 years ago |
+| CVE-2023-5156 | Medium | 2      | ✅    | ❌        | ❌          | 2 years ago |
+| CVE-2024-0553 | Medium | 1      | ✅    | ❌        | ❌          | 2 years ago |
+| CVE-2024-0567 | Medium | 1      | ✅    | ❌        | ❌          | 2 years ago |
+| CVE-2024-22365 | Medium | 4      | ✅    | ❌        | ❌          | 2 years ago |"#;
+
+        assert_eq!(
+            markdown_data.to_string().trim(),
+            expected_markdown_output.trim()
+        );
     }
 }
