@@ -8,6 +8,9 @@ RUN curl -L https://get.jenkins.io/war-stable/2.401.3/jenkins.war -o /jenkins.wa
 
 FROM nginx:latest
 
+
 RUN apt update && apt full-upgrade -y
 
 COPY --from=builder /jenkins.war /jenkins.war
+
+ENV foo=bar
