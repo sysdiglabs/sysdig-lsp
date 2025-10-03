@@ -1,3 +1,139 @@
+use crate::domain::scanresult::scan_result::ScanResult;
+use crate::domain::scanresult::severity::Severity;
+use itertools::Itertools;
+
+impl From<ScanResult> for MarkdownData {
+    fn from(value: ScanResult) -> Self {
+        Self {
+            summary: summary_from(&value),
+            fixable_packages: fixable_packages_from(&value),
+            policies: policies_from(&value),
+            vulnerabilities: vulnerabilities_from(&value),
+        }
+    }
+}
+
+fn summary_from(value: &ScanResult) -> MarkdownSummary {
+    MarkdownSummary {
+        pull_string: value.metadata().pull_string().to_string(),
+        image_id: value.metadata().image_id().to_string(),
+        digest: value.metadata().digest().unwrap_or("").to_string(),
+        base_os: value.metadata().base_os().name().to_string(),
+        total_vulns_found: summary_vulns_from(value),
+    }
+}
+
+fn summary_vulns_from(value: &ScanResult) -> MarkdownSummaryVulns {
+    let mut summary = MarkdownSummaryVulns::default();
+
+    for vuln in value.vulnerabilities() {
+        summary.total_found += 1;
+        let fixable = vuln.fixable();
+        match vuln.severity() {
+            Severity::Critical => {
+                summary.critical += 1;
+                if fixable {
+                    summary.critical_fixable += 1;
+                }
+            }
+            Severity::High => {
+                summary.high += 1;
+                if fixable {
+                    summary.high_fixable += 1;
+                }
+            }
+            Severity::Medium => {
+                summary.medium += 1;
+                if fixable {
+                    summary.medium_fixable += 1;
+                }
+            }
+            Severity::Low => {
+                summary.low += 1;
+                if fixable {
+                    summary.low_fixable += 1;
+                }
+            }
+            Severity::Negligible => {
+                summary.negligible += 1;
+                if fixable {
+                    summary.negligible_fixable += 1;
+                }
+            }
+            Severity::Unknown => {}
+        }
+    }
+    summary
+}
+
+fn fixable_packages_from(value: &ScanResult) -> Vec<FixablePackage> {
+    value
+        .packages()
+        .into_iter()
+        .filter(|p| p.vulnerabilities().iter().any(|v| v.fixable()))
+        .map(|p| {
+            let mut vulns = FixablePackageVulnerabilities::default();
+            let mut exploits = 0;
+            for v in p.vulnerabilities() {
+                if v.exploitable() {
+                    exploits += 1;
+                }
+                match v.severity() {
+                    Severity::Critical => vulns.critical += 1,
+                    Severity::High => vulns.high += 1,
+                    Severity::Medium => vulns.medium += 1,
+                    Severity::Low => vulns.low += 1,
+                    Severity::Negligible => vulns.negligible += 1,
+                    Severity::Unknown => {}
+                }
+            }
+
+            FixablePackage {
+                name: p.name().to_string(),
+                package_type: p.package_type().to_string(),
+                version: p.version().to_string(),
+                suggested_fix: p
+                    .vulnerabilities()
+                    .iter()
+                    .find_map(|v| v.fix_version().map(|s| s.to_string())),
+                vulnerabilities: vulns,
+                exploits,
+            }
+        })
+        .collect()
+}
+
+fn policies_from(value: &ScanResult) -> Vec<PolicyEvaluated> {
+    value
+        .policies()
+        .iter()
+        .map(|p| PolicyEvaluated {
+            name: p.name().to_string(),
+            passed: p.evaluation_result().is_passed(),
+            failures: p.bundles().iter().map(|b| b.rules().len()).sum::<usize>() as u32,
+            risks_accepted: 0, // Cannot determine this from the current data model
+        })
+        .collect()
+}
+
+fn vulnerabilities_from(value: &ScanResult) -> Vec<VulnerabilityEvaluated> {
+    value
+        .vulnerabilities()
+        .iter()
+        .map(|v| VulnerabilityEvaluated {
+            cve: v.cve().to_string(),
+            severity: v.severity().to_string(),
+            packages_found: v.found_in_packages().len() as u32,
+            fixable: v.fixable(),
+            exploitable: v.exploitable(),
+            accepted_risk: !v.accepted_risks().is_empty(),
+            age: "N/A", // Calculating age requires current time, which is not ideal here.
+        })
+        .sorted_by(|a, b| a.cve.cmp(&b.cve))
+        .collect()
+}
+
+#[derive(Clone, Debug, Default)]
 pub struct MarkdownData {
     pub summary: MarkdownSummary,
     pub fixable_packages: Vec<FixablePackage>,
@@ -5,6 +141,7 @@ pub struct MarkdownData {
     pub vulnerabilities: Vec<VulnerabilityEvaluated>,
 }
 
+#[derive(Clone, Debug, Default)]
 pub struct MarkdownSummary {
     pub pull_string: String,
     pub image_id: String,
@@ -13,6 +150,7 @@ pub struct MarkdownSummary {
     pub total_vulns_found: MarkdownSummaryVulns,
 }
 
+#[derive(Clone, Debug, Default)]
 pub struct MarkdownSummaryVulns {
     pub total_found: u32,
     pub critical: u32,
@@ -27,6 +165,7 @@ pub struct MarkdownSummaryVulns {
     pub negligible_fixable: u32,
 }
 
+#[derive(Clone, Debug, Default)]
 pub struct FixablePackage {
     pub name: String,
     pub package_type: String,
@@ -36,6 +175,7 @@ pub struct FixablePackage {
     pub exploits: u32,
 }
 
+#[derive(Clone, Debug, Default)]
 pub struct FixablePackageVulnerabilities {
     pub critical: u32,
     pub high: u32,
@@ -44,6 +184,7 @@ pub struct FixablePackageVulnerabilities {
     pub negligible: u32,
 }
 
+#[derive(Clone, Debug, Default)]
 pub struct PolicyEvaluated {
     pub name: String,
     pub passed: bool,
@@ -51,6 +192,7 @@ pub struct PolicyEvaluated {
     pub risks_accepted: u32,
 }
 
+#[derive(Clone, Debug, Default)]
 pub struct VulnerabilityEvaluated {
     pub cve: String,
     pub severity: String,
