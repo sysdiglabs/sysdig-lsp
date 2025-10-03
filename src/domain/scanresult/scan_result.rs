@@ -21,7 +21,7 @@ use std::sync::Arc;
 pub struct ScanResult {
     scan_type: ScanType,
     metadata: Metadata,
-    layers: HashMap<String, Arc<Layer>>,
+    layers: Vec<Arc<Layer>>,
     packages: HashMap<Arc<Package>, ()>,
     vulnerabilities: HashMap<String, Arc<Vulnerability>>,
     policies: HashMap<String, Arc<Policy>>,
@@ -54,7 +54,7 @@ impl ScanResult {
                 labels,
                 created_at,
             ),
-            layers: HashMap::new(),
+            layers: Vec::new(),
             packages: HashMap::new(),
             vulnerabilities: HashMap::new(),
             policies: HashMap::new(),
@@ -79,19 +79,26 @@ impl ScanResult {
         command: String,
     ) -> Arc<Layer> {
         let layer = Arc::new(Layer::new(digest.clone(), index, size, command));
-        self.layers.insert(digest, layer.clone());
+        self.layers.push(layer.clone());
         layer
     }
 
     pub fn find_layer_by_digest(&self, digest: &str) -> Option<Arc<Layer>> {
-        self.layers.get(digest).cloned()
+        if digest.trim().is_empty() {
+            return None;
+        }
+
+        self.layers
+            .iter()
+            .find(|l| l.digest() == Some(digest))
+            .cloned()
     }
 
     pub fn layers(&self) -> Vec<Arc<Layer>> {
         self.layers
-            .values()
-            .cloned()
+            .iter()
             .sorted_by(|a, b| a.index().cmp(&b.index()))
+            .cloned()
             .collect()
     }
 
