@@ -30,18 +30,14 @@ impl From<JsonScanResultV1> for ScanResult {
 }
 
 fn add_layers(report: &JsonResult, scan_result: &mut ScanResult) {
-    report
-        .layers
-        .values()
-        .filter(|json_layer| !json_layer.digest.is_empty())
-        .for_each(|json_layer| {
-            scan_result.add_layer(
-                json_layer.digest.clone(),
-                json_layer.index,
-                json_layer.size,
-                json_layer.command.clone().unwrap_or_default(),
-            );
-        });
+    report.layers.values().for_each(|json_layer| {
+        scan_result.add_layer(
+            json_layer.digest.clone(),
+            json_layer.index,
+            json_layer.size,
+            json_layer.command.clone().unwrap_or_default(),
+        );
+    });
 }
 
 fn add_risk_accepts(result: &JsonResult, scan_result: &mut ScanResult) {
@@ -631,5 +627,52 @@ mod tests {
             32
         );
         // assert_eq!(scan_result.vulnerabilities().len(), 97);
+    }
+
+    #[test]
+    fn test_handles_layers_without_digest() {
+        let postgres_13_json = include_bytes!("../../tests/fixtures/scan-results/postgres_13.json");
+        let json_scan_result: JsonScanResultV1 = serde_json::from_slice(postgres_13_json).unwrap();
+        let scan_result: ScanResult = json_scan_result.into();
+
+        assert_eq!(
+            scan_result.layers().len(),
+            25,
+            "Should have 25 layers in total"
+        );
+
+        let layers_with_digest = scan_result
+            .layers()
+            .into_iter()
+            .filter(|l| l.digest().is_some())
+            .count();
+        assert_eq!(
+            layers_with_digest, 14,
+            "Should have 14 layers with a digest"
+        );
+
+        let layers_without_digest = scan_result
+            .layers()
+            .into_iter()
+            .filter(|l| l.digest().is_none())
+            .count();
+        assert_eq!(
+            layers_without_digest, 11,
+            "Should have 11 layers without a digest"
+        );
+
+        assert!(
+            scan_result.find_layer_by_digest("").is_none(),
+            "Searching for an empty digest should return None"
+        );
+        assert!(
+            scan_result.find_layer_by_digest("   ").is_none(),
+            "Searching for a whitespace digest should return None"
+        );
+
+        let digest = "sha256:04d52f0a5b32b0f627bbd4427a0374f0a8d2d409dbbfda0099d89b87c774df36";
+        let found_layer = scan_result.find_layer_by_digest(digest);
+        assert!(found_layer.is_some(), "Should find layer by valid digest");
+        assert_eq!(found_layer.unwrap().digest(), Some(digest));
     }
 }
