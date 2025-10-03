@@ -1,8 +1,11 @@
-use std::fmt::{Display, Formatter};
+use std::{
+    fmt::{Display, Formatter},
+    sync::Arc,
+};
 
 use markdown_table::{Heading, HeadingAlignment, MarkdownTable};
 
-use crate::domain::scanresult::{scan_result::ScanResult, severity::Severity};
+use crate::domain::scanresult::{layer::Layer, scan_result::ScanResult, severity::Severity};
 
 #[derive(Clone, Debug, Default)]
 pub struct FixablePackage {
@@ -28,6 +31,47 @@ pub struct FixablePackageTable(pub Vec<FixablePackage>);
 
 impl From<&ScanResult> for FixablePackageTable {
     fn from(value: &ScanResult) -> Self {
+        FixablePackageTable(
+            value
+                .packages()
+                .into_iter()
+                .filter(|p| p.vulnerabilities().iter().any(|v| v.fixable()))
+                .map(|p| {
+                    let mut vulns = FixablePackageVulnerabilities::default();
+                    let mut exploits = 0;
+                    for v in p.vulnerabilities() {
+                        if v.exploitable() {
+                            exploits += 1;
+                        }
+                        match v.severity() {
+                            Severity::Critical => vulns.critical += 1,
+                            Severity::High => vulns.high += 1,
+                            Severity::Medium => vulns.medium += 1,
+                            Severity::Low => vulns.low += 1,
+                            Severity::Negligible => vulns.negligible += 1,
+                            Severity::Unknown => {}
+                        }
+                    }
+
+                    FixablePackage {
+                        name: p.name().to_string(),
+                        package_type: p.package_type().to_string(),
+                        version: p.version().to_string(),
+                        suggested_fix: p
+                            .vulnerabilities()
+                            .iter()
+                            .find_map(|v| v.fix_version().map(|s| s.to_string())),
+                        vulnerabilities: vulns,
+                        exploits,
+                    }
+                })
+                .collect(),
+        )
+    }
+}
+
+impl From<&Arc<Layer>> for FixablePackageTable {
+    fn from(value: &Arc<Layer>) -> Self {
         FixablePackageTable(
             value
                 .packages()
