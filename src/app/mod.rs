@@ -5,6 +5,7 @@ mod image_scanner;
 mod lsp_client;
 mod lsp_interactor;
 mod lsp_server;
+mod markdown;
 mod queries;
 
 pub use document_database::*;
