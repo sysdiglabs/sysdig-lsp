@@ -21,4 +21,8 @@ Sysdig LSP provides tools to integrate container security checks into your devel
 ## [Docker-compose Image Analysis](./docker_compose_image_analysis.md)
 - Scans the images defined in your `docker-compose.yml` files for vulnerabilities.
 
+## [Vulnerability Explanation](./vulnerability_explanation.md)
+- Displays a detailed summary of scan results when hovering over a scanned image name.
+- Provides immediate feedback on vulnerabilities, severities, and available fixes.
+
 See the linked documents for more details.

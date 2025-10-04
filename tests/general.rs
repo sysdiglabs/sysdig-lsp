@@ -11,9 +11,10 @@ use sysdig_lsp::domain::scanresult::scan_type::ScanType;
 use tower_lsp::LanguageServer;
 use tower_lsp::lsp_types::{
     CodeActionContext, CodeActionParams, DiagnosticSeverity, DidChangeConfigurationParams,
-    DidChangeTextDocumentParams, DidOpenTextDocumentParams, ExecuteCommandParams, InitializeParams,
-    PartialResultParams, Position, Range, TextDocumentIdentifier, TextDocumentItem, Url,
-    VersionedTextDocumentIdentifier, WorkDoneProgressParams,
+    DidChangeTextDocumentParams, DidOpenTextDocumentParams, ExecuteCommandParams, HoverParams,
+    InitializeParams, PartialResultParams, Position, Range, TextDocumentIdentifier,
+    TextDocumentItem, TextDocumentPositionParams, Url, VersionedTextDocumentIdentifier,
+    WorkDoneProgressParams,
 };
 
 #[fixture]
@@ -341,6 +342,84 @@ async fn test_execute_command(
         diagnostic.range,
         Range::new(Position::new(0, 0), Position::new(0, 11))
     );
+}
+
+#[rstest]
+#[awt]
+#[tokio::test]
+async fn test_hover(
+    #[future] server_with_open_file: TestSetup,
+    open_file_url: Url,
+    scan_result: ScanResult,
+) {
+    // Given
+    server_with_open_file
+        .component_factory
+        .image_scanner
+        .lock()
+        .await
+        .expect_scan_image()
+        .with(mockall::predicate::eq("alpine"))
+        .times(1)
+        .returning(move |_| Ok(scan_result.clone()));
+
+    let params = ExecuteCommandParams {
+        command: "sysdig-lsp.execute-scan".to_string(),
+        arguments: vec![
+            json!({"range":{"end":{"character":11,"line":0},"start":{"character": 0,"line":0}},"uri":open_file_url.clone()}),
+            json!("alpine"),
+        ],
+        work_done_progress_params: WorkDoneProgressParams::default(),
+    };
+    let result = server_with_open_file.server.execute_command(params).await;
+    assert!(result.is_ok());
+
+    // When
+    let params = HoverParams {
+        text_document_position_params: TextDocumentPositionParams {
+            text_document: TextDocumentIdentifier::new(open_file_url),
+            position: Position::new(0, 5), // Position inside "alpine"
+        },
+        work_done_progress_params: WorkDoneProgressParams::default(),
+    };
+    let result = server_with_open_file.server.hover(params).await;
+    assert!(result.is_ok());
+    let hover = result.unwrap().unwrap();
+
+    // Then
+    let expected_markdown = r#"## Sysdig Scan Result
+### Summary
+* **PullString**: alpine:latest
+* **ImageID**: `sha256:12345`
+* **Digest**: `sha256:67890`
+* **BaseOS**: alpine:3.18
+
+| TOTAL VULNS FOUND | CRITICAL | HIGH        | MEDIUM | LOW | NEGLIGIBLE |
+| :-------------: | :----: | :---------: | :--: | :-: | :------: |
+| 1               | 0      | 1 (1 Fixable) | 0    | 0   | 0        |
+
+
+### Fixable Packages
+| PACKAGE | TYPE | VERSION | SUGGESTED FIX | CRITICAL | HIGH | MEDIUM | LOW | NEGLIGIBLE | EXPLOIT |
+| :----- | :-: | :---- | :---------- | :----: | :-: | :--: | :-: | :------: | :---: |
+| package1 | os  | 1.0.0 | 1.0.1       | -      | 1   | -    | -   | -        | -     |
+
+
+
+### Vulnerability Detail
+
+| VULN CVE    | SEVERITY | PACKAGES | FIXABLE | EXPLOITABLE | ACCEPTED RISK |
+| :---------- | :----- | :----- | :---- | :-------- | :---------- |
+| CVE-2021-1234 | High   | 1      | ✅    | ❌        | ❌          |
+"#;
+
+    let expected_json = serde_json::json!({
+        "contents": {
+            "kind": "markdown",
+            "value": expected_markdown.to_string()
+        }
+    });
+    assert_eq!(serde_json::to_value(hover).unwrap(), expected_json);
 }
 
 #[rstest]

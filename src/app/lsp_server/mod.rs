@@ -5,8 +5,8 @@ use tower_lsp::LanguageServer;
 use tower_lsp::jsonrpc::{Error, Result};
 use tower_lsp::lsp_types::{
     CodeActionParams, CodeActionResponse, CodeLens, CodeLensParams, DidChangeConfigurationParams,
-    DidChangeTextDocumentParams, DidOpenTextDocumentParams, ExecuteCommandParams, InitializeParams,
-    InitializeResult, InitializedParams, Range,
+    DidChangeTextDocumentParams, DidOpenTextDocumentParams, ExecuteCommandParams, Hover,
+    HoverParams, InitializeParams, InitializeResult, InitializedParams, Range,
 };
 
 use super::{InMemoryDocumentDatabase, LSPClient};
@@ -88,6 +88,10 @@ where
 
     async fn execute_command(&self, params: ExecuteCommandParams) -> Result<Option<Value>> {
         self.inner.read().await.execute_command(params).await
+    }
+
+    async fn hover(&self, params: HoverParams) -> Result<Option<Hover>> {
+        self.inner.read().await.hover(params).await
     }
 
     async fn shutdown(&self) -> Result<()> {

@@ -1,6 +1,6 @@
 use tower_lsp::{
     jsonrpc::Result,
-    lsp_types::{Diagnostic, MessageType},
+    lsp_types::{Diagnostic, MessageType, Position, Range},
 };
 
 use super::{InMemoryDocumentDatabase, LSPClient};
@@ -26,6 +26,7 @@ where
     pub async fn update_document_with_text(&self, uri: &str, text: &str) {
         self.document_database.write_document_text(uri, text).await;
         self.document_database.remove_diagnostics(uri).await;
+        self.document_database.remove_documentations(uri).await;
         let _ = self.publish_all_diagnostics().await;
     }
 
@@ -54,6 +55,17 @@ where
     pub async fn append_document_diagnostics(&self, uri: &str, diagnostics: &[Diagnostic]) {
         self.document_database
             .append_document_diagnostics(uri, diagnostics)
+            .await
+    }
+
+    pub async fn append_documentation(&self, uri: &str, range: Range, documentation: String) {
+        self.document_database
+            .append_documentation(uri, range, documentation)
+            .await
+    }
+    pub async fn read_documentation_at(&self, uri: &str, position: Position) -> Option<String> {
+        self.document_database
+            .read_documentation_at(uri, position)
             .await
     }
 }

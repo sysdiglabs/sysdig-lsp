@@ -11,4 +11,4 @@ services:
 
   # Another service for good measure
   api:
-    image: my-api:1.0
+    image: quay.io/sysdig/agent-slim:latest
