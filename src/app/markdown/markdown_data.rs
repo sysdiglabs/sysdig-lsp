@@ -66,8 +66,10 @@ mod test {
                 pull_string: "ubuntu:23.04".to_string(),
                 image_id: "sha256:f4cdeba72b994748f5eb1f525a70a9cc553b66037ec37e23645fbf3f0f5c160d"
                     .to_string(),
-                digest: "sha256:5a828e28de105c3d7821c4442f0f5d1c52dc16acf4999d5f31a3bc0f03f06edd"
-                    .to_string(),
+                digest: Some(
+                    "sha256:5a828e28de105c3d7821c4442f0f5d1c52dc16acf4999d5f31a3bc0f03f06edd"
+                        .to_string(),
+                ),
                 base_os: "ubuntu 23.04".to_string(),
 
                 total_vulns_found: MarkdownSummaryTable {
