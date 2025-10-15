@@ -102,6 +102,7 @@ where
 
         let uri = self.location.uri.as_str();
         self.interactor.remove_diagnostics(uri).await;
+        self.interactor.remove_documentations(uri).await;
         self.interactor
             .append_document_diagnostics(uri, &[diagnostic])
             .await;
