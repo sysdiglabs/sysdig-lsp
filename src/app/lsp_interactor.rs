@@ -68,4 +68,8 @@ where
             .read_documentation_at(uri, position)
             .await
     }
+
+    pub async fn remove_documentations(&self, uri: &str) {
+        self.document_database.remove_documentations(uri).await
+    }
 }

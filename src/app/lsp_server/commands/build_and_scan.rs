@@ -113,6 +113,7 @@ where
             diagnostics_for_layers(&document_text, &scan_result)?;
 
         self.interactor.remove_diagnostics(uri).await;
+        self.interactor.remove_documentations(uri).await;
         self.interactor
             .append_document_diagnostics(uri, &[diagnostic])
             .await;
