@@ -57,10 +57,7 @@ impl From<&ScanResult> for FixablePackageTable {
                         name: p.name().to_string(),
                         package_type: p.package_type().to_string(),
                         version: p.version().to_string(),
-                        suggested_fix: p
-                            .vulnerabilities()
-                            .iter()
-                            .find_map(|v| v.fix_version().map(|s| s.to_string())),
+                        suggested_fix: p.suggested_fix_version().map(|v| v.to_string()),
                         vulnerabilities: vulns,
                         exploits,
                     }
@@ -98,10 +95,7 @@ impl From<&Arc<Layer>> for FixablePackageTable {
                         name: p.name().to_string(),
                         package_type: p.package_type().to_string(),
                         version: p.version().to_string(),
-                        suggested_fix: p
-                            .vulnerabilities()
-                            .iter()
-                            .find_map(|v| v.fix_version().map(|s| s.to_string())),
+                        suggested_fix: p.suggested_fix_version().map(|v| v.to_string()),
                         vulnerabilities: vulns,
                         exploits,
                     }
