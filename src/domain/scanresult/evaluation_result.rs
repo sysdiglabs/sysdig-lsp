@@ -13,3 +13,13 @@ impl EvaluationResult {
         matches!(self, Self::Passed)
     }
 }
+
+impl From<&str> for EvaluationResult {
+    fn from(value: &str) -> Self {
+        if value.eq_ignore_ascii_case("failed") {
+            EvaluationResult::Failed
+        } else {
+            EvaluationResult::Passed
+        }
+    }
+}

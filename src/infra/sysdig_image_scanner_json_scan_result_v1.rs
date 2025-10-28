@@ -7,7 +7,6 @@ use std::collections::HashMap;
 use crate::domain::scanresult::{
     accepted_risk_reason::AcceptedRiskReason,
     architecture::Architecture,
-    evaluation_result::EvaluationResult,
     operating_system::{Family, OperatingSystem},
     package_type::PackageType,
     scan_result::ScanResult,
@@ -17,7 +16,7 @@ use crate::domain::scanresult::{
 
 impl From<JsonScanResultV1> for ScanResult {
     fn from(report: JsonScanResultV1) -> Self {
-        let mut scan_result = ScanResult::from(&report.result.metadata);
+        let mut scan_result = ScanResult::from(&report.result);
 
         add_layers(&report.result, &mut scan_result);
         add_risk_accepts(&report.result, &mut scan_result);
@@ -145,11 +144,7 @@ fn add_policies(result: &JsonResult, scan_result: &mut ScanResult) {
                 let rule = policy_bundle.add_rule(
                     json_rule.rule_id.clone(),
                     json_rule.description.clone(),
-                    if json_rule.evaluation_result.eq_ignore_ascii_case("failed") {
-                        EvaluationResult::Failed
-                    } else {
-                        EvaluationResult::Passed
-                    },
+                    json_rule.evaluation_result.as_str().into(),
                 );
 
                 for json_failure in json_rule.failures.as_deref().unwrap_or_default() {
@@ -188,8 +183,9 @@ fn failure_message_for(result: &JsonResult, package_ref: &str, vulnerability_ref
     }
 }
 
-impl From<&JsonMetadata> for ScanResult {
-    fn from(metadata: &JsonMetadata) -> Self {
+impl From<&JsonResult> for ScanResult {
+    fn from(result: &JsonResult) -> Self {
+        let metadata = &result.metadata;
         ScanResult::new(
             ScanType::Docker,
             metadata.pull_string.clone(),
@@ -200,6 +196,7 @@ impl From<&JsonMetadata> for ScanResult {
             arch_from_str(&metadata.architecture),
             metadata.labels.clone(),
             metadata.created_at,
+            result.policies.global_evaluation.as_str().into(),
         )
     }
 }
