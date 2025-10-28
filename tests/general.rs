@@ -5,6 +5,7 @@ use rstest::{fixture, rstest};
 use serde_json::json;
 use std::collections::HashMap;
 use sysdig_lsp::domain::scanresult::architecture::Architecture;
+use sysdig_lsp::domain::scanresult::evaluation_result::EvaluationResult;
 use sysdig_lsp::domain::scanresult::operating_system::{Family, OperatingSystem};
 use sysdig_lsp::domain::scanresult::scan_result::ScanResult;
 use sysdig_lsp::domain::scanresult::scan_type::ScanType;
@@ -120,6 +121,7 @@ fn scan_result() -> ScanResult {
         Architecture::Amd64,
         HashMap::new(),
         chrono::Utc::now(),
+        EvaluationResult::Passed,
     );
 
     let layer = result.add_layer(

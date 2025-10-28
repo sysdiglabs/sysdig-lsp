@@ -27,6 +27,7 @@ pub struct ScanResult {
     policies: HashMap<String, Arc<Policy>>,
     policy_bundles: HashMap<String, Arc<PolicyBundle>>,
     accepted_risks: HashMap<String, Arc<AcceptedRisk>>,
+    global_evaluation: EvaluationResult,
 }
 
 impl ScanResult {
@@ -41,6 +42,7 @@ impl ScanResult {
         architecture: Architecture,
         labels: HashMap<String, String>,
         created_at: DateTime<Utc>,
+        global_evaluation: EvaluationResult,
     ) -> Self {
         Self {
             scan_type,
@@ -60,6 +62,7 @@ impl ScanResult {
             policies: HashMap::new(),
             policy_bundles: HashMap::new(),
             accepted_risks: HashMap::new(),
+            global_evaluation,
         }
     }
 
@@ -242,15 +245,7 @@ impl ScanResult {
     }
 
     pub fn evaluation_result(&self) -> EvaluationResult {
-        if self
-            .policies()
-            .iter()
-            .all(|p| p.evaluation_result().is_passed())
-        {
-            EvaluationResult::Passed
-        } else {
-            EvaluationResult::Failed
-        }
+        self.global_evaluation
     }
 }
 
@@ -277,6 +272,7 @@ mod tests {
             Architecture::Amd64,
             HashMap::new(),
             Utc::now(),
+            EvaluationResult::Failed,
         )
     }
 
@@ -505,7 +501,18 @@ mod tests {
 
     #[test]
     fn evaluation_result_passed() {
-        let mut scan_result = create_scan_result();
+        let mut scan_result = ScanResult::new(
+            ScanType::Docker,
+            "alpine:latest".to_string(),
+            "sha256:12345".to_string(),
+            Some("sha256:67890".to_string()),
+            OperatingSystem::new(Family::Linux, "alpine:3.18".to_string()),
+            123456,
+            Architecture::Amd64,
+            HashMap::new(),
+            Utc::now(),
+            EvaluationResult::Passed,
+        );
         let now = Utc::now();
         let policy =
             scan_result.add_policy("policy-1".to_string(), "My Policy".to_string(), now, now);
@@ -758,7 +765,11 @@ mod tests {
 
         assert_eq!(bundle.evaluation_result(), EvaluationResult::Passed);
         assert_eq!(policy.evaluation_result(), EvaluationResult::Passed);
-        assert_eq!(scan_result.evaluation_result(), EvaluationResult::Passed);
+        assert_eq!(
+            scan_result.evaluation_result(),
+            EvaluationResult::Failed,
+            "Global evaluation should remain Failed"
+        );
 
         let failed_rule = bundle.add_rule(
             "rule-failed".to_string(),
@@ -780,6 +791,10 @@ mod tests {
 
         assert_eq!(bundle.evaluation_result(), EvaluationResult::Failed);
         assert_eq!(policy.evaluation_result(), EvaluationResult::Failed);
-        assert_eq!(scan_result.evaluation_result(), EvaluationResult::Failed);
+        assert_eq!(
+            scan_result.evaluation_result(),
+            EvaluationResult::Failed,
+            "Global evaluation should remain Failed"
+        );
     }
 }
