@@ -3,6 +3,7 @@ use crate::domain::scanresult::layer::Layer;
 use crate::domain::scanresult::package_type::PackageType;
 use crate::domain::scanresult::vulnerability::Vulnerability;
 use crate::domain::scanresult::weak_hash::WeakHash;
+use semver::Version;
 use std::collections::HashSet;
 use std::fmt::Debug;
 use std::hash::{Hash, Hasher};
@@ -11,7 +12,7 @@ use std::sync::{Arc, RwLock};
 pub struct Package {
     package_type: PackageType,
     name: String,
-    version: String,
+    version: Version,
     path: String,
     found_in_layer: Arc<Layer>,
     vulnerabilities: RwLock<HashSet<WeakHash<Vulnerability>>>,
@@ -34,7 +35,7 @@ impl Package {
     pub(in crate::domain::scanresult) fn new(
         package_type: PackageType,
         name: String,
-        version: String,
+        version: Version,
         path: String,
         found_in_layer: Arc<Layer>,
     ) -> Self {
@@ -57,7 +58,7 @@ impl Package {
         &self.name
     }
 
-    pub fn version(&self) -> &str {
+    pub fn version(&self) -> &Version {
         &self.version
     }
 
