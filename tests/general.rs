@@ -2,7 +2,6 @@ mod common;
 
 use common::TestSetup;
 use rstest::{fixture, rstest};
-use semver::Version;
 use serde_json::json;
 use std::collections::HashMap;
 use sysdig_lsp::domain::scanresult::architecture::Architecture;
@@ -135,7 +134,7 @@ fn scan_result() -> ScanResult {
     let package1 = result.add_package(
         PackageType::Os,
         "package1".to_string(),
-        Version::parse("1.0.0").unwrap(),
+        "1.0.0".to_string(),
         "/usr/lib/package1".to_string(),
         layer.clone(),
     );
@@ -143,7 +142,7 @@ fn scan_result() -> ScanResult {
     result.add_package(
         PackageType::Os,
         "package2".to_string(),
-        Version::parse("2.0.0").unwrap(),
+        "2.0.0".to_string(),
         "/usr/lib/package2".to_string(),
         layer,
     );
@@ -154,7 +153,7 @@ fn scan_result() -> ScanResult {
         chrono::NaiveDate::from_ymd_opt(2021, 1, 1).unwrap(),
         None,
         false,
-        Some(Version::parse("1.0.1").unwrap()),
+        Some("1.0.1".to_string()),
     );
 
     package1.add_vulnerability_found(vulnerability);
