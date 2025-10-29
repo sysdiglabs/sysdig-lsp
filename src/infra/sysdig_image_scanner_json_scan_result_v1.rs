@@ -13,7 +13,6 @@ use crate::domain::scanresult::{
     scan_type::ScanType,
     severity::Severity,
 };
-use semver::Version;
 
 impl From<JsonScanResultV1> for ScanResult {
     fn from(report: JsonScanResultV1) -> Self {
@@ -56,15 +55,13 @@ fn add_risk_accepts(result: &JsonResult, scan_result: &mut ScanResult) {
 
 fn add_vulnerabilities(result: &JsonResult, scan_result: &mut ScanResult) {
     for v in result.vulnerabilities.values() {
-        let fix_version = v.fix_version.as_ref().and_then(|s| Version::parse(s).ok());
-
         let vuln = scan_result.add_vulnerability(
             v.name.clone(),
             v.severity.clone().into(),
             v.disclosure_date,
             v.solution_date,
             v.exploitable,
-            fix_version,
+            v.fix_version.clone(),
         );
 
         v.risk_accept_refs
@@ -89,14 +86,10 @@ fn add_packages(result: &JsonResult, scan_result: &mut ScanResult) {
             continue;
         };
 
-        let Ok(version) = Version::parse(&json_pkg.version) else {
-            continue;
-        };
-
         let pkg = scan_result.add_package(
             json_pkg.package_type.clone().into(),
             json_pkg.name.clone(),
-            version,
+            json_pkg.version.clone(),
             json_pkg.path.clone(),
             layer_where_this_package_is_found,
         );
