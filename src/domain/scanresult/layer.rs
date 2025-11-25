@@ -60,17 +60,25 @@ impl Layer {
     }
 
     pub(in crate::domain::scanresult) fn add_package(&self, a_package: Arc<Package>) {
-        self.packages.write().unwrap().insert(a_package);
+        self.packages
+            .write()
+            .unwrap_or_else(|e| panic!("RwLock poisoned in layer.rs: {}", e))
+            .insert(a_package);
     }
 
     pub fn packages(&self) -> Vec<Arc<Package>> {
-        self.packages.read().unwrap().iter().cloned().collect()
+        self.packages
+            .read()
+            .unwrap_or_else(|e| panic!("RwLock poisoned in layer.rs: {}", e))
+            .iter()
+            .cloned()
+            .collect()
     }
 
     pub fn vulnerabilities(&self) -> Vec<Arc<Vulnerability>> {
         self.packages
             .read()
-            .unwrap()
+            .unwrap_or_else(|e| panic!("RwLock poisoned in layer.rs: {}", e))
             .iter()
             .flat_map(|p| p.vulnerabilities())
             .collect()

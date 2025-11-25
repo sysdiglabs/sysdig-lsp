@@ -75,7 +75,7 @@ impl Package {
         if self
             .vulnerabilities
             .write()
-            .unwrap()
+            .unwrap_or_else(|e| panic!("RwLock poisoned in package.rs: {}", e))
             .insert(WeakHash(Arc::downgrade(&vulnerability)))
         {
             vulnerability.add_found_in_package(self.clone());
@@ -85,7 +85,7 @@ impl Package {
     pub fn vulnerabilities(&self) -> Vec<Arc<Vulnerability>> {
         self.vulnerabilities
             .read()
-            .unwrap()
+            .unwrap_or_else(|e| panic!("RwLock poisoned in package.rs: {}", e))
             .iter()
             .filter_map(|v| v.0.upgrade())
             .collect()
@@ -95,7 +95,7 @@ impl Package {
         if self
             .accepted_risks
             .write()
-            .unwrap()
+            .unwrap_or_else(|e| panic!("RwLock poisoned in package.rs: {}", e))
             .insert(WeakHash(Arc::downgrade(&accepted_risk)))
         {
             accepted_risk.add_for_package(self.clone());
@@ -105,7 +105,7 @@ impl Package {
     pub fn accepted_risks(&self) -> Vec<Arc<AcceptedRisk>> {
         self.accepted_risks
             .read()
-            .unwrap()
+            .unwrap_or_else(|e| panic!("RwLock poisoned in package.rs: {}", e))
             .iter()
             .filter_map(|r| r.0.upgrade())
             .collect()
@@ -156,12 +156,15 @@ impl Package {
 
         let mut sorted_candidates = candidate_versions;
         sorted_candidates.sort_by(|a, b| {
-            let score_a = scores.get(a).unwrap();
-            let score_b = scores.get(b).unwrap();
+            // These unwrap_or calls should never execute since we populated scores
+            // for all candidate versions above, but we handle the case defensively
+            let empty_score = HashMap::new();
+            let score_a = scores.get(a).unwrap_or(&empty_score);
+            let score_b = scores.get(b).unwrap_or(&empty_score);
 
             for severity in &severity_order {
-                let count_a = score_a.get(severity).unwrap();
-                let count_b = score_b.get(severity).unwrap();
+                let count_a = score_a.get(severity).unwrap_or(&0);
+                let count_b = score_b.get(severity).unwrap_or(&0);
                 if count_a != count_b {
                     return count_b.cmp(count_a); // Higher count is better
                 }
@@ -212,8 +215,18 @@ impl Clone for Package {
             version: self.version.clone(),
             path: self.path.clone(),
             found_in_layer: self.found_in_layer.clone(),
-            vulnerabilities: RwLock::new(self.vulnerabilities.read().unwrap().clone()),
-            accepted_risks: RwLock::new(self.accepted_risks.read().unwrap().clone()),
+            vulnerabilities: RwLock::new(
+                self.vulnerabilities
+                    .read()
+                    .unwrap_or_else(|e| panic!("RwLock poisoned in package.rs: {}", e))
+                    .clone(),
+            ),
+            accepted_risks: RwLock::new(
+                self.accepted_risks
+                    .read()
+                    .unwrap_or_else(|e| panic!("RwLock poisoned in package.rs: {}", e))
+                    .clone(),
+            ),
         }
     }
 }

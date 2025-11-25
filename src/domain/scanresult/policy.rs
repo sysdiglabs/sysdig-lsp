@@ -62,7 +62,7 @@ impl Policy {
         if self
             .bundles
             .write()
-            .unwrap()
+            .unwrap_or_else(|e| panic!("RwLock poisoned in policy.rs: {}", e))
             .insert(WeakHash(Arc::downgrade(policy_bundle)))
         {
             policy_bundle.add_policy(self.clone());
@@ -72,7 +72,7 @@ impl Policy {
     pub fn bundles(&self) -> Vec<Arc<PolicyBundle>> {
         self.bundles
             .read()
-            .unwrap()
+            .unwrap_or_else(|e| panic!("RwLock poisoned in policy.rs: {}", e))
             .iter()
             .filter_map(|b| b.0.upgrade())
             .collect()
