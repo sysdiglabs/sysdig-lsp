@@ -187,7 +187,7 @@ mod tests {
     #[case("amazonlinux:2")]
     #[case("mongo:5.0")]
     #[case("quay.io/sysdig/agent-slim:latest")]
-    #[case("openjdk:11-jre-slim")]
+    #[case("openjdk:26-ea-slim")]
     #[case("quay.io/sysdig/sysdig-ubi9:1")]
     #[serial_test::file_serial(scanner)]
     #[tokio::test]
