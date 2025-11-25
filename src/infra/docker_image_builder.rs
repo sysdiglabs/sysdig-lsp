@@ -46,15 +46,19 @@ impl DockerImageBuilder {
             .pack_containerfile_dir_into_a_tar(containerfile)
             .await?;
 
+        let dockerfile_name = containerfile
+            .file_name()
+            .and_then(|osstr| osstr.to_str())
+            .ok_or_else(|| {
+                DockerImageBuilderError::Generic(
+                    "invalid containerfile path: unable to extract filename".to_string(),
+                )
+            })?;
+
         let image_name = format!("sysdig-lsp-image-build-{}", rand::random::<u8>());
         let mut results = self.docker_client.build_image(
             BuildImageOptionsBuilder::new()
-                .dockerfile(
-                    containerfile
-                        .file_name()
-                        .and_then(|osstr| osstr.to_str())
-                        .unwrap(),
-                )
+                .dockerfile(dockerfile_name)
                 .t(&image_name)
                 .build(),
             None,
@@ -66,12 +70,16 @@ impl DockerImageBuilder {
         ));
         while let Some(result) = results.next().await {
             match result {
-                Ok(BuildInfo { aux, .. }) if aux.is_some() => {
-                    let image_id = aux.unwrap().id.unwrap();
-                    build_info = Ok(ImageBuildResult {
-                        image_name: image_name.clone(),
-                        image_id,
-                    });
+                Ok(BuildInfo {
+                    aux: Some(aux_info @ bollard::secret::ImageId { id: Some(_), .. }),
+                    ..
+                }) => {
+                    if let Some(image_id) = aux_info.id {
+                        build_info = Ok(ImageBuildResult {
+                            image_name: image_name.clone(),
+                            image_id,
+                        });
+                    }
                 }
                 Err(error) => return Err(DockerImageBuilderError::Docker(error)),
                 _ => {}

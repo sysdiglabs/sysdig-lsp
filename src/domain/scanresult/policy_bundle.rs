@@ -37,7 +37,7 @@ impl PolicyBundle {
         if self
             .found_in_policies
             .write()
-            .unwrap()
+            .unwrap_or_else(|e| panic!("RwLock poisoned in policy_bundle.rs: {}", e))
             .insert(WeakHash(Arc::downgrade(&policy)))
         {
             policy.add_bundle(self);
@@ -56,14 +56,17 @@ impl PolicyBundle {
             evaluation_result,
             Arc::downgrade(self),
         ));
-        self.rules.write().unwrap().insert(rule.clone());
+        self.rules
+            .write()
+            .unwrap_or_else(|e| panic!("RwLock poisoned in policy_bundle.rs: {}", e))
+            .insert(rule.clone());
         rule
     }
 
     pub fn found_in_policies(&self) -> Vec<Arc<Policy>> {
         self.found_in_policies
             .read()
-            .unwrap()
+            .unwrap_or_else(|e| panic!("RwLock poisoned in policy_bundle.rs: {}", e))
             .iter()
             .filter_map(|p| p.0.upgrade())
             .collect()
@@ -78,7 +81,12 @@ impl PolicyBundle {
     }
 
     pub fn rules(&self) -> Vec<Arc<PolicyBundleRule>> {
-        self.rules.read().unwrap().iter().cloned().collect()
+        self.rules
+            .read()
+            .unwrap_or_else(|e| panic!("RwLock poisoned in policy_bundle.rs: {}", e))
+            .iter()
+            .cloned()
+            .collect()
     }
 
     pub fn evaluation_result(&self) -> EvaluationResult {

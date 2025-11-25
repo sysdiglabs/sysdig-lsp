@@ -141,8 +141,8 @@ impl ScannerBinaryManager {
         let stdout =
             String::from_utf8_lossy(&output.stdout) + String::from_utf8_lossy(&output.stderr);
         let version_str = Regex::new(r"Sysdig CLI Scanner (\d+\.\d+\.\d+)")
-            .unwrap()
-            .captures(&stdout)
+            .ok()
+            .and_then(|re| re.captures(&stdout))
             .and_then(|captures| captures.get(1))
             .map(|x| x.as_str())
             .ok_or_else(|| {

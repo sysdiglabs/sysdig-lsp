@@ -42,7 +42,12 @@ impl Clone for PolicyBundleRule {
             description: self.description.clone(),
             evaluation_result: self.evaluation_result,
             parent: self.parent.clone(),
-            failures: RwLock::new(self.failures.read().unwrap().clone()),
+            failures: RwLock::new(
+                self.failures
+                    .read()
+                    .unwrap_or_else(|e| panic!("RwLock poisoned in policy_bundle_rule.rs: {}", e))
+                    .clone(),
+            ),
         }
     }
 }
@@ -86,7 +91,7 @@ impl PolicyBundleRule {
         let failure = PolicyBundleRuleImageConfigFailure::new(remediation, Arc::downgrade(self));
         self.failures
             .write()
-            .unwrap()
+            .unwrap_or_else(|e| panic!("RwLock poisoned in policy_bundle_rule.rs: {}", e))
             .push(PolicyBundleRuleFailure::ImageConfig(failure.clone()));
         failure
     }
@@ -98,12 +103,15 @@ impl PolicyBundleRule {
         let failure = PolicyBundleRulePkgVulnFailure::new(description, Arc::downgrade(self));
         self.failures
             .write()
-            .unwrap()
+            .unwrap_or_else(|e| panic!("RwLock poisoned in policy_bundle_rule.rs: {}", e))
             .push(PolicyBundleRuleFailure::PkgVuln(failure.clone()));
         failure
     }
 
     pub fn failures(&self) -> Vec<PolicyBundleRuleFailure> {
-        self.failures.read().unwrap().clone()
+        self.failures
+            .read()
+            .unwrap_or_else(|e| panic!("RwLock poisoned in policy_bundle_rule.rs: {}", e))
+            .clone()
     }
 }

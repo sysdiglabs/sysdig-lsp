@@ -245,14 +245,14 @@ where
             )
             .await;
 
-        if documentation_found.is_none() {
+        let Some(documentation) = documentation_found else {
             return Ok(None);
-        }
+        };
 
         Ok(Some(Hover {
             contents: Markup(MarkupContent {
                 kind: Markdown,
-                value: documentation_found.unwrap(),
+                value: documentation,
             }),
             range: None,
         }))

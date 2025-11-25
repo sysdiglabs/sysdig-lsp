@@ -90,7 +90,7 @@ impl AcceptedRisk {
         if self
             .assigned_to_vulnerabilities
             .write()
-            .unwrap()
+            .unwrap_or_else(|e| panic!("RwLock poisoned in accepted_risk.rs: {}", e))
             .insert(WeakHash(Arc::downgrade(&vulnerability)))
         {
             vulnerability.add_accepted_risk(self.clone());
@@ -100,7 +100,7 @@ impl AcceptedRisk {
     pub fn assigned_to_vulnerabilities(self: &Arc<Self>) -> Vec<Arc<Vulnerability>> {
         self.assigned_to_vulnerabilities
             .read()
-            .unwrap()
+            .unwrap_or_else(|e| panic!("RwLock poisoned in accepted_risk.rs: {}", e))
             .iter()
             .filter_map(|v| v.0.upgrade())
             .collect()
@@ -110,7 +110,7 @@ impl AcceptedRisk {
         if self
             .assigned_to_packages
             .write()
-            .unwrap()
+            .unwrap_or_else(|e| panic!("RwLock poisoned in accepted_risk.rs: {}", e))
             .insert(WeakHash(Arc::downgrade(&a_package)))
         {
             a_package.add_accepted_risk(self.clone());
@@ -120,7 +120,7 @@ impl AcceptedRisk {
     pub fn assigned_to_packages(self: &Arc<Self>) -> Vec<Arc<Package>> {
         self.assigned_to_packages
             .read()
-            .unwrap()
+            .unwrap_or_else(|e| panic!("RwLock poisoned in accepted_risk.rs: {}", e))
             .iter()
             .filter_map(|p| p.0.upgrade())
             .collect()

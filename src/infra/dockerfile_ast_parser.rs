@@ -51,10 +51,13 @@ pub fn parse_dockerfile(contents: &str) -> Vec<Instruction> {
         let end_column = lines[end_line].trim_end().len();
         let range = Range::new(
             Position::new(
-                start_line.try_into().unwrap(),
-                start_column.try_into().unwrap(),
+                start_line.min(u32::MAX as usize) as u32,
+                start_column.min(u32::MAX as usize) as u32,
             ),
-            Position::new(end_line.try_into().unwrap(), end_column.try_into().unwrap()),
+            Position::new(
+                end_line.min(u32::MAX as usize) as u32,
+                end_column.min(u32::MAX as usize) as u32,
+            ),
         );
         let (actual_instruction, comment) = match aggregated_trimmed.split_once("#") {
             Some((instr, comm)) => (instr, Some(comm.trim().to_string())),
@@ -74,7 +77,8 @@ pub fn parse_dockerfile(contents: &str) -> Vec<Instruction> {
 
         let raw_trimmed = raw_instruction_without_comment.trim_start();
         let mut parts = raw_trimmed.splitn(2, char::is_whitespace);
-        let _ = parts.next().unwrap();
+        // Skip first element (the keyword)
+        parts.next();
         let arguments_str = parts.next().unwrap_or("").to_string();
 
         let arguments: Vec<String> = trimmed_actual[keyword_end..]
