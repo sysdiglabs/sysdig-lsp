@@ -2035,7 +2035,7 @@ dependencies = [
 
 [[package]]
 name = "sysdig-lsp"
-version = "0.7.3"
+version = "0.7.4"
 dependencies = [
  "async-trait",
  "bollard",
