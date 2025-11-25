@@ -7,6 +7,7 @@ test:
 
 fix:
     cargo fix --allow-staged --allow-dirty
+    cargo machete --fix
 
 fmt:
     cargo fmt

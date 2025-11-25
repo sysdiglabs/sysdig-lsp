@@ -14,7 +14,6 @@ use crate::domain::scanresult::severity::Severity;
 use crate::domain::scanresult::vulnerability::Vulnerability;
 use chrono::{DateTime, NaiveDate, Utc};
 use itertools::Itertools;
-use semver::Version;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -110,7 +109,7 @@ impl ScanResult {
         &mut self,
         package_type: PackageType,
         name: String,
-        version: Version,
+        version: String,
         path: String,
         found_in_layer: Arc<Layer>,
     ) -> Arc<Package> {
@@ -141,7 +140,7 @@ impl ScanResult {
         disclosure_date: NaiveDate,
         solution_date: Option<NaiveDate>,
         exploitable: bool,
-        fix_version: Option<Version>,
+        fix_version: Option<String>,
     ) -> Arc<Vulnerability> {
         self.vulnerabilities
             .entry(cve.clone())
@@ -314,7 +313,7 @@ mod tests {
         let package = scan_result.add_package(
             PackageType::Os,
             "musl".to_string(),
-            Version::parse("1.2.3").unwrap(),
+            "1.2.3".to_string(),
             "/lib/ld-musl-x86_64.so.1".to_string(),
             layer.clone(),
         );
@@ -337,7 +336,7 @@ mod tests {
             Utc::now().naive_utc().date(),
             None,
             false,
-            Some(Version::parse("1.2.4").unwrap()),
+            Some("1.2.4".to_string()),
         );
 
         assert_eq!(scan_result.vulnerabilities().len(), 1);
@@ -358,7 +357,7 @@ mod tests {
         let package = scan_result.add_package(
             PackageType::Os,
             "musl".to_string(),
-            Version::parse("1.2.3").unwrap(),
+            "1.2.3".to_string(),
             "/lib/ld-musl-x86_64.so.1".to_string(),
             layer.clone(),
         );
@@ -368,7 +367,7 @@ mod tests {
             Utc::now().naive_utc().date(),
             None,
             false,
-            Some(Version::parse("1.2.4").unwrap()),
+            Some("1.2.4".to_string()),
         );
 
         package.add_vulnerability_found(vuln.clone());
@@ -463,7 +462,7 @@ mod tests {
             Utc::now().naive_utc().date(),
             None,
             false,
-            Some(Version::parse("1.2.4").unwrap()),
+            Some("1.2.4".to_string()),
         );
 
         vuln.add_accepted_risk(risk.clone());
@@ -489,7 +488,7 @@ mod tests {
         let package = scan_result.add_package(
             PackageType::Os,
             "musl".to_string(),
-            Version::parse("1.2.3").unwrap(),
+            "1.2.3".to_string(),
             "/lib/ld-musl-x86_64.so.1".to_string(),
             layer.clone(),
         );
@@ -572,13 +571,13 @@ mod tests {
         let package = scan_result.add_package(
             PackageType::Os,
             "musl".to_string(),
-            Version::parse("1.2.3").unwrap(),
+            "1.2.3".to_string(),
             "/path".to_string(),
             layer.clone(),
         );
         assert_eq!(package.package_type(), &PackageType::Os);
         assert_eq!(package.name(), "musl");
-        assert_eq!(package.version(), &Version::parse("1.2.3").unwrap());
+        assert_eq!(package.version(), "1.2.3");
         assert_eq!(package.path(), "/path");
         assert!(format!("{:?}", package).contains("musl"));
         assert_eq!(package.clone(), package);
@@ -590,7 +589,7 @@ mod tests {
             now.naive_utc().date(),
             Some(now.naive_utc().date()),
             true,
-            Some(Version::parse("1.2.4").unwrap()),
+            Some("1.2.4".to_string()),
         );
         assert_eq!(vuln.cve(), "CVE-1");
         assert_eq!(vuln.severity(), Severity::High);
@@ -598,7 +597,7 @@ mod tests {
         assert_eq!(vuln.solution_date(), Some(now.naive_utc().date()));
         assert!(vuln.exploitable());
         assert!(vuln.fixable());
-        assert_eq!(vuln.fix_version(), Some(&Version::parse("1.2.4").unwrap()));
+        assert_eq!(vuln.fix_version(), Some(&"1.2.4".to_string()));
         assert!(format!("{:?}", vuln).contains("CVE-1"));
 
         // AcceptedRisk
@@ -673,14 +672,14 @@ mod tests {
         let pkg = scan_result.add_package(
             PackageType::Os,
             "pkg".to_string(),
-            Version::parse("1.0.0").unwrap(),
+            "1.0.0".to_string(),
             "/path".to_string(),
             layer.clone(),
         );
         let pkg2 = scan_result.add_package(
             PackageType::Os,
             "pkg".to_string(),
-            Version::parse("1.0.0").unwrap(),
+            "1.0.0".to_string(),
             "/path".to_string(),
             layer.clone(),
         );
