@@ -44,10 +44,6 @@ impl InMemoryDocumentDatabase {
         self.read_document(uri).await.map(|e| e.text)
     }
 
-    pub async fn remove_document(&self, uri: &str) {
-        self.documents.write().await.remove(uri);
-    }
-
     pub async fn append_document_diagnostics(
         &self,
         uri: impl Into<String>,
@@ -165,17 +161,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_remove_document() {
-        let db = InMemoryDocumentDatabase::default();
-
-        db.write_document_text("file://main.rs", "contents").await;
-        assert!(db.read_document("file://main.rs").await.is_some());
-
-        db.remove_document("file://main.rs").await;
-        assert!(db.read_document("file://main.rs").await.is_none());
-    }
-
-    #[tokio::test]
     async fn test_add_diagnostics() {
         let db = InMemoryDocumentDatabase::default();
         let diagnostics = vec![
@@ -200,13 +185,13 @@ mod tests {
 
         db.append_document_diagnostics(
             "file://mod1.rs",
-            &vec![create_diagnostic((0, 0), (0, 6), "Incorrect module name")],
+            &[create_diagnostic((0, 0), (0, 6), "Incorrect module name")],
         )
         .await;
 
         db.append_document_diagnostics(
             "file://mod2.rs",
-            &vec![
+            &[
                 create_diagnostic((0, 0), (0, 6), "Incorrect module name"),
                 create_diagnostic((0, 7), (0, 8), "Unexpected token"),
             ],

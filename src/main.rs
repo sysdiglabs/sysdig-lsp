@@ -1,10 +1,14 @@
-use clap::Parser;
-use sysdig_lsp::{
+use crate::{
     app::LSPServer,
     infra::{ConcreteComponentFactory, lsp_logger::LSPLogger},
 };
+use clap::Parser;
 use tower_lsp::{LspService, Server};
 use tracing_subscriber::layer::SubscriberExt;
+
+mod app;
+mod domain;
+mod infra;
 
 #[derive(Parser, Debug)]
 #[command(version, author, about, long_about)]

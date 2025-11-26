@@ -6,7 +6,7 @@ use tower_lsp::jsonrpc::{Error, Result};
 use tower_lsp::lsp_types::{
     CodeActionParams, CodeActionResponse, CodeLens, CodeLensParams, DidChangeConfigurationParams,
     DidChangeTextDocumentParams, DidOpenTextDocumentParams, ExecuteCommandParams, Hover,
-    HoverParams, InitializeParams, InitializeResult, InitializedParams, Range,
+    HoverParams, InitializeParams, InitializeResult, InitializedParams,
 };
 
 use super::{InMemoryDocumentDatabase, LSPClient};
@@ -39,13 +39,6 @@ impl<C, F: ComponentFactory> LSPServer<C, F> {
             inner: RwLock::new(LSPServerInner::new(client, component_factory)),
         }
     }
-}
-
-struct CommandInfo {
-    title: String,
-    command: String,
-    arguments: Option<Vec<Value>>,
-    range: Range,
 }
 
 #[async_trait::async_trait]

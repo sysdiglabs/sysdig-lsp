@@ -1,5 +1,5 @@
 use serde_json::Value;
-use tower_lsp::jsonrpc::{Error, ErrorCode, Result};
+use tower_lsp::jsonrpc::{self, Error, ErrorCode, Result};
 use tower_lsp::lsp_types::HoverContents::Markup;
 use tower_lsp::lsp_types::MarkupKind::Markdown;
 use tower_lsp::lsp_types::{
@@ -78,7 +78,7 @@ where
         };
 
         let commands = command_generator::generate_commands_for_uri(uri, &content);
-        Ok(commands)
+        commands.map_err(|e| jsonrpc::Error::internal_error().with_message(e))
     }
 
     pub async fn initialize(

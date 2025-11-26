@@ -10,7 +10,7 @@ mod queries;
 
 pub use document_database::*;
 pub use image_builder::{ImageBuildError, ImageBuildResult, ImageBuilder};
-pub use image_scanner::{ImageScanError, ImageScanner, Vulnerabilities};
+pub use image_scanner::{ImageScanError, ImageScanner};
 pub use lsp_client::LSPClient;
 pub use lsp_interactor::LspInteractor;
 pub use lsp_server::LSPServer;
