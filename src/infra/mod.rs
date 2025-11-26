@@ -9,6 +9,6 @@ mod sysdig_image_scanner_json_scan_result_v1;
 pub use sysdig_image_scanner::{SysdigAPIToken, SysdigImageScanner};
 pub mod lsp_logger;
 pub use component_factory_impl::ConcreteComponentFactory;
-pub use compose_ast_parser::{ImageInstruction, parse_compose_file};
+pub use compose_ast_parser::parse_compose_file;
 pub use docker_image_builder::DockerImageBuilder;
-pub use dockerfile_ast_parser::{Instruction, parse_dockerfile};
+pub use dockerfile_ast_parser::parse_dockerfile;

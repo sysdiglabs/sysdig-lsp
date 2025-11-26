@@ -8,6 +8,8 @@ pub trait ImageBuilder {
 }
 
 pub struct ImageBuildResult {
+    // FIXME(fede): Eventually we will need to check if this dead code is actually needed for our use case
+    #[allow(dead_code)]
     pub image_id: String,
     pub image_name: String,
 }

@@ -1,3 +1,4 @@
+use thiserror::Error;
 use tower_lsp::lsp_types::{Position, Range};
 
 #[derive(Debug, PartialEq)]
@@ -6,8 +7,9 @@ pub struct ImageInstruction {
     pub range: Range,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum ParseError {
+    #[error("Invalid yaml: {0}")]
     InvalidYaml(marked_yaml::LoadError),
 }
 

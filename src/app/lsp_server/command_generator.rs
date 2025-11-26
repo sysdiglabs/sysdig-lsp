@@ -55,7 +55,7 @@ impl From<CommandInfo> for CodeLens {
     }
 }
 
-pub fn generate_commands_for_uri(uri: &Url, content: &str) -> Vec<CommandInfo> {
+pub fn generate_commands_for_uri(uri: &Url, content: &str) -> Result<Vec<CommandInfo>, String> {
     let file_uri = uri.as_str();
 
     if file_uri.contains("docker-compose.yml")
@@ -65,24 +65,28 @@ pub fn generate_commands_for_uri(uri: &Url, content: &str) -> Vec<CommandInfo> {
     {
         generate_compose_commands(uri, content)
     } else {
-        generate_dockerfile_commands(uri, content)
+        Ok(generate_dockerfile_commands(uri, content))
     }
 }
 
-fn generate_compose_commands(url: &Url, content: &str) -> Vec<CommandInfo> {
+fn generate_compose_commands(url: &Url, content: &str) -> Result<Vec<CommandInfo>, String> {
     let mut commands = vec![];
-    if let Ok(instructions) = parse_compose_file(content) {
-        for instruction in instructions {
-            commands.push(
-                SupportedCommands::ExecuteBaseImageScan {
-                    location: Location::new(url.clone(), instruction.range),
-                    image: instruction.image_name,
-                }
-                .into(),
-            );
+    match parse_compose_file(content) {
+        Ok(instructions) => {
+            for instruction in instructions {
+                commands.push(
+                    SupportedCommands::ExecuteBaseImageScan {
+                        location: Location::new(url.clone(), instruction.range),
+                        image: instruction.image_name,
+                    }
+                    .into(),
+                );
+            }
         }
+        Err(err) => return Err(format!("{}", err)),
     }
-    commands
+
+    Ok(commands)
 }
 
 fn generate_dockerfile_commands(uri: &Url, content: &str) -> Vec<CommandInfo> {
