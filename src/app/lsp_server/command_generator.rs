@@ -83,7 +83,7 @@ fn generate_compose_commands(url: &Url, content: &str) -> Result<Vec<CommandInfo
                 );
             }
         }
-        Err(err) => return Err(format!("{:?}", err)),
+        Err(err) => return Err(format!("{}", err)),
     }
 
     Ok(commands)
