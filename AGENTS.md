@@ -256,6 +256,7 @@ All I/O operations, including scanning, building, and LSP communication, are asy
 * Add focused unit tests alongside modules using `#[cfg(test)]` for local behavior.
 * Broader flows and end-to-end LSP interactions belong in `tests/general.rs`.
 * For debugging, `cargo test -- --nocapture` can be used to see all test output.
+* Some tests, such as `infra::sysdig_image_scanner::tests::it_scans_popular_images_correctly_test`, are slow because they scan real container images. It is recommended to run them in a focused way or skip them in local development to speed up the feedback loop.
 
 ---
 
