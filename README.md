@@ -23,7 +23,7 @@ helping you detect vulnerabilities and misconfigurations earlier in the developm
 | Layered image analysis          | Supported                                                              | [Supported](./docs/features/layered_analysis.md) (0.5.0+)              |
 | Docker-compose image analysis   | Supported                                                              | [Supported](./docs/features/docker_compose_image_analysis.md) (0.6.0+) |
 | Vulnerability explanation       | Supported                                                              | [Supported](./docs/features/vulnerability_explanation.md) (0.7.0+)     |
-| K8s Manifest image analysis     | Supported                                                              | In roadmap                                                             |
+| K8s Manifest image analysis     | Supported                                                              | [Supported](./docs/features/k8s_manifest_image_analysis.md) (0.8.0+)  |
 | Infrastructure-as-code analysis | Supported                                                              | In roadmap                                                             |
 
 ## Build

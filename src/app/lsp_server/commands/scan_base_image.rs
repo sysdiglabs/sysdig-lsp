@@ -80,20 +80,29 @@ where
                     .vulnerabilities()
                     .iter()
                     .counts_by(|v| v.severity());
+                let critical_count = vulns.get(&Severity::Critical).unwrap_or(&0_usize);
+                let high_count = vulns.get(&Severity::High).unwrap_or(&0_usize);
+                let medium_count = vulns.get(&Severity::Medium).unwrap_or(&0_usize);
+                let low_count = vulns.get(&Severity::Low).unwrap_or(&0_usize);
+                let negligible_count = vulns.get(&Severity::Negligible).unwrap_or(&0_usize);
+
                 diagnostic.message = format!(
                     "Vulnerabilities found for {}: {} Critical, {} High, {} Medium, {} Low, {} Negligible",
                     image_name,
-                    vulns.get(&Severity::Critical).unwrap_or(&0_usize),
-                    vulns.get(&Severity::High).unwrap_or(&0_usize),
-                    vulns.get(&Severity::Medium).unwrap_or(&0_usize),
-                    vulns.get(&Severity::Low).unwrap_or(&0_usize),
-                    vulns.get(&Severity::Negligible).unwrap_or(&0_usize),
+                    critical_count,
+                    high_count,
+                    medium_count,
+                    low_count,
+                    negligible_count,
                 );
 
-                diagnostic.severity = Some(if scan_result.evaluation_result().is_passed() {
-                    DiagnosticSeverity::INFORMATION
-                } else {
+                // Determine severity based on vulnerability counts, not just policy evaluation
+                diagnostic.severity = Some(if *critical_count > 0 || *high_count > 0 {
                     DiagnosticSeverity::ERROR
+                } else if *medium_count > 0 {
+                    DiagnosticSeverity::WARNING
+                } else {
+                    DiagnosticSeverity::INFORMATION
                 });
             }
 
