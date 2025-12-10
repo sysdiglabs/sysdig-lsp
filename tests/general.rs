@@ -339,7 +339,7 @@ async fn test_execute_command(
         diagnostic.message,
         "Vulnerabilities found for alpine: 0 Critical, 1 High, 0 Medium, 0 Low, 0 Negligible"
     );
-    assert_eq!(diagnostic.severity, Some(DiagnosticSeverity::INFORMATION));
+    assert_eq!(diagnostic.severity, Some(DiagnosticSeverity::ERROR));
     assert_eq!(
         diagnostic.range,
         Range::new(Position::new(0, 0), Position::new(0, 11))
@@ -430,4 +430,64 @@ async fn test_hover(
 async fn test_shutdown(#[future] initialized_server: TestSetup) {
     let result = initialized_server.server.shutdown().await;
     assert!(result.is_ok());
+}
+
+#[rstest]
+#[awt]
+#[tokio::test]
+async fn test_k8s_manifest_code_lens(#[future] initialized_server: TestSetup) {
+    let k8s_url: Url = "file:///deployment.yaml".parse().unwrap();
+    let k8s_content = include_str!("fixtures/k8s-deployment.yaml");
+
+    initialized_server
+        .server
+        .did_open(DidOpenTextDocumentParams {
+            text_document: TextDocumentItem::new(
+                k8s_url.clone(),
+                "yaml".to_string(),
+                1,
+                k8s_content.to_string(),
+            ),
+        })
+        .await;
+
+    let params = tower_lsp::lsp_types::CodeLensParams {
+        text_document: TextDocumentIdentifier::new(k8s_url.clone()),
+        work_done_progress_params: WorkDoneProgressParams::default(),
+        partial_result_params: PartialResultParams::default(),
+    };
+
+    let result = initialized_server
+        .server
+        .code_lens(params)
+        .await
+        .unwrap()
+        .unwrap();
+
+    let result_json = serde_json::to_value(result).unwrap();
+
+    let expected_json = serde_json::json!([
+        {
+            "command": {
+                "arguments": [
+                    {
+                        "range": {
+                            "end": { "character": 25, "line": 10 },
+                            "start": { "character": 15, "line": 10 }
+                        },
+                        "uri": "file:///deployment.yaml"
+                    },
+                    "nginx:1.19"
+                ],
+                "command": "sysdig-lsp.execute-scan",
+                "title": "Scan base image"
+            },
+            "range": {
+                "end": { "character": 25, "line": 10 },
+                "start": { "character": 15, "line": 10 }
+            }
+        }
+    ]);
+
+    assert_eq!(result_json, expected_json);
 }

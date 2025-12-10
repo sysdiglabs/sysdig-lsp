@@ -89,11 +89,14 @@ Key components:
 * **`DockerImageBuilder`**
   * Builds container images using Bollard (Docker API client).
 
-* **Dockerfile / Compose AST Parsers**
+* **Dockerfile / Compose / K8s Manifest AST Parsers**
   * Parse Dockerfiles to extract image references from `FROM` instructions (including multi-stage builds).
   * Parse Docker Compose YAML (e.g. service `image:` fields).
+  * Parse Kubernetes manifests YAML (e.g. `containers[].image` and `initContainers[].image` fields).
+    * K8s manifests are detected by checking for both `apiVersion:` and `kind:` fields in YAML files.
+    * Supports all common K8s resource types: Pods, Deployments, StatefulSets, DaemonSets, Jobs, CronJobs.
   * Handle complex scenarios such as build args and multi-platform images.
-  * Implemented via modules like `ast_parser.rs`.
+  * Implemented via modules like `dockerfile_ast_parser.rs`, `compose_ast_parser.rs`, and `k8s_manifest_ast_parser.rs`.
 
 * **`ScannerBinaryManager`**
   * Downloads the Sysdig CLI scanner binary on demand.
@@ -165,6 +168,9 @@ The project uses `just` as a command runner to encapsulate common workflows.
 Additional helpful commands:
 
 * `cargo test -- --nocapture` – run tests with full output when debugging.
+* `cargo test --lib` – run only unit tests (faster than running all tests).
+
+**Important:** The tests `infra::sysdig_image_scanner::tests::it_scans_popular_images_correctly_test::case_*` are very slow because they scan real container images. These tests should only be run when making changes to the image scanner. For day-to-day development, skip them or run focused tests instead.
 
 ### 3.4 Pre-commit Hooks
 
@@ -313,7 +319,191 @@ Check the workflow file in case of doubt.
 
 ---
 
-## 8. Commit & Pull Request Guidelines
+## 8. Development Patterns & Common Gotchas
+
+This section documents important patterns, findings, and gotchas discovered during development that are critical for maintaining consistency and avoiding common pitfalls.
+
+### 8.1 Adding Support for New File Types
+
+When adding support for a new file type (e.g. Kubernetes manifests, Terraform files), follow this pattern established by Docker Compose and K8s manifest implementations:
+
+#### Step 1: Create a Parser Module
+
+1. **Create parser in `src/infra/`**: e.g. `k8s_manifest_ast_parser.rs`
+   - Define an `ImageInstruction` struct with `image_name` and `range` (LSP Range)
+   - Create a `parse_*` function that returns `Result<Vec<ImageInstruction>, ParseError>`
+   - Use `marked_yaml` for YAML parsing to preserve position information for accurate LSP ranges
+   - Include comprehensive unit tests covering:
+     - Simple cases
+     - Multiple images
+     - Edge cases (empty, null, invalid YAML)
+     - Complex image names with registries
+     - Quoted values
+
+2. **Export the parser in `src/infra/mod.rs`**:
+   ```rust
+   mod k8s_manifest_ast_parser;
+   pub use k8s_manifest_ast_parser::parse_k8s_manifest;
+   ```
+
+#### Step 2: Integrate into Command Generator
+
+3. **Update `src/app/lsp_server/command_generator.rs`**:
+   - Add import for the new parser
+   - Create a detection function (e.g. `is_k8s_manifest_file()`)
+     - **IMPORTANT**: Detect by content, not just file extension to avoid false positives
+     - Example: K8s manifests must contain both `apiVersion:` and `kind:` fields
+   - Add branch in `generate_commands_for_uri()` to route to the new file type
+   - Create a `generate_*_commands()` function following the established pattern:
+     ```rust
+     fn generate_k8s_manifest_commands(url: &Url, content: &str) -> Result<Vec<CommandInfo>, String> {
+         let mut commands = vec![];
+         match parse_k8s_manifest(content) {
+             Ok(instructions) => {
+                 for instruction in instructions {
+                     commands.push(
+                         SupportedCommands::ExecuteBaseImageScan {
+                             location: Location::new(url.clone(), instruction.range),
+                             image: instruction.image_name,
+                         }
+                         .into(),
+                     );
+                 }
+             }
+             Err(err) => return Err(format!("{}", err)),
+         }
+         Ok(commands)
+     }
+     ```
+
+#### Step 3: Add Integration Tests
+
+4. **Create fixture in `tests/fixtures/`**: e.g. `k8s-deployment.yaml`
+5. **Add integration test in `tests/general.rs`**:
+   - Test code lens generation
+   - Verify correct ranges and image names
+   - Use existing patterns from compose tests as reference
+
+#### Step 4: Update Documentation
+
+6. **Update `README.md`**: Add feature to the features table with version number
+7. **Update `AGENTS.md`**: Document the parser in architecture section
+8. **Create feature doc**: Add `docs/features/<feature>.md` with examples
+9. **Update `docs/features/README.md`**: Add entry for the new feature
+
+### 8.2 File Type Detection Gotchas
+
+**❌ DON'T**: Rely solely on file extensions for detection
+```rust
+// BAD: Matches ALL YAML files including compose files
+fn is_k8s_manifest_file(file_uri: &str) -> bool {
+    file_uri.ends_with(".yaml") || file_uri.ends_with(".yml")
+}
+```
+
+**✅ DO**: Combine file extension with content-based detection
+```rust
+// GOOD: Checks both extension AND content
+fn is_k8s_manifest_file(file_uri: &str, content: &str) -> bool {
+    if !(file_uri.ends_with(".yaml") || file_uri.ends_with(".yml")) {
+        return false;
+    }
+    content.contains("apiVersion:") && content.contains("kind:")
+}
+```
+
+**Why**: File extensions alone can cause false positives. Docker Compose files, K8s manifests, and generic YAML files all use `.yaml`/`.yml` extensions. Content-based detection ensures accurate routing.
+
+### 8.3 Diagnostic Severity Logic
+
+The diagnostic severity shown in the editor should reflect the **actual vulnerability severity**, not just policy evaluation results.
+
+**Current Implementation** (in `src/app/lsp_server/commands/scan_base_image.rs`):
+```rust
+diagnostic.severity = Some(if *critical_count > 0 || *high_count > 0 {
+    DiagnosticSeverity::ERROR       // Red
+} else if *medium_count > 0 {
+    DiagnosticSeverity::WARNING     // Yellow
+} else {
+    DiagnosticSeverity::INFORMATION // Blue
+});
+```
+
+**Gotcha**: The previous implementation used `scan_result.evaluation_result().is_passed()` which only reflected policy pass/fail. This caused High/Critical vulnerabilities to show as INFORMATION (blue) if the policy passed, which was confusing for users.
+
+**When modifying severity logic**: Always base it on vulnerability counts/severity, not policy evaluation.
+
+### 8.4 LSP Range Calculation
+
+When parsing files to extract ranges for code lenses:
+
+1. **Use position-aware parsers**: `marked_yaml` for YAML, custom parsers for Dockerfiles
+2. **Account for quotes**: Image names might be quoted in YAML (`"nginx:latest"` or `'nginx:latest'`)
+   ```rust
+   let mut raw_len = image_name.len();
+   if let Some(c) = first_char && (c == '"' || c == '\'') {
+       raw_len += 2; // Include quotes in range
+   }
+   ```
+3. **Test with various formats**: Unquoted, single-quoted, double-quoted values
+4. **0-indexed LSP positions**: LSP uses 0-indexed line/character positions, but some parsers (like `marked_yaml`) use 1-indexed positions - convert accordingly:
+   ```rust
+   let start_line = start.line() as u32 - 1;
+   let start_char = start.column() as u32 - 1;
+   ```
+
+### 8.5 Testing Patterns
+
+**Unit Tests** (`#[cfg(test)]` in modules):
+- Test parser logic in isolation
+- Use string literals for test input
+- Cover edge cases exhaustively
+- Run fast (no I/O)
+
+**Integration Tests** (`tests/general.rs`):
+- Test full LSP flow: `did_open` → `code_lens` → `execute_command`
+- Use fixtures from `tests/fixtures/`
+- Mock external dependencies (ImageScanner) with `mockall`
+- Verify JSON serialization of LSP responses
+
+**Slow Tests to Skip**:
+- `infra::sysdig_image_scanner::tests::it_scans_popular_images_correctly_test::case_*`
+- These scan real container images over the network
+- Only run when changing scanner-related code
+- Use `cargo test --lib -- --skip it_scans_popular_images_correctly_test` for faster feedback
+
+### 8.6 Common Command Patterns
+
+When adding new LSP commands:
+
+1. **Define in `supported_commands.rs`**: Add to `SupportedCommands` enum
+2. **Implement in `commands/` directory**: Create a struct implementing `LspCommand` trait
+3. **Wire in `lsp_server_inner.rs`**: Add execution handler
+4. **Generate in `command_generator.rs`**: Create CommandInfo for code lenses
+5. **Test in `tests/general.rs`**: Verify command execution and results
+
+### 8.7 Version Bumping Strategy
+
+Follow semantic versioning for unstable versions (0.X.Y):
+
+- **Patch (0.X.Y → 0.X.Y+1)**: Bug fixes, documentation, refactoring
+- **Minor (0.X.Y → 0.X+1.0)**: New features, enhancements
+- **Don't stabilize (1.0.0)** unless explicitly instructed
+
+**When to release**:
+- ✅ New feature implemented
+- ✅ Bug fixes
+- ❌ CI/refactoring/internal changes (no user impact)
+- ❌ Documentation-only changes
+
+**Release process**:
+1. Update version in `Cargo.toml`
+2. Commit and merge to default branch
+3. GitHub Actions workflow automatically creates release with cross-compiled binaries
+
+---
+
+## 9. Commit & Pull Request Guidelines
 
 To keep history clean and reviews manageable:
 

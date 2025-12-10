@@ -2,7 +2,7 @@ use serde_json::{Value, json};
 use tower_lsp::lsp_types::{CodeLens, Command, Location, Range, Url};
 
 use crate::app::lsp_server::supported_commands::SupportedCommands;
-use crate::infra::{parse_compose_file, parse_dockerfile};
+use crate::infra::{parse_compose_file, parse_dockerfile, parse_k8s_manifest};
 
 pub struct CommandInfo {
     pub title: String,
@@ -64,6 +64,8 @@ pub fn generate_commands_for_uri(uri: &Url, content: &str) -> Result<Vec<Command
         || file_uri.contains("compose.yaml")
     {
         generate_compose_commands(uri, content)
+    } else if is_k8s_manifest_file(file_uri, content) {
+        generate_k8s_manifest_commands(uri, content)
     } else {
         Ok(generate_dockerfile_commands(uri, content))
     }
@@ -72,6 +74,37 @@ pub fn generate_commands_for_uri(uri: &Url, content: &str) -> Result<Vec<Command
 fn generate_compose_commands(url: &Url, content: &str) -> Result<Vec<CommandInfo>, String> {
     let mut commands = vec![];
     match parse_compose_file(content) {
+        Ok(instructions) => {
+            for instruction in instructions {
+                commands.push(
+                    SupportedCommands::ExecuteBaseImageScan {
+                        location: Location::new(url.clone(), instruction.range),
+                        image: instruction.image_name,
+                    }
+                    .into(),
+                );
+            }
+        }
+        Err(err) => return Err(format!("{}", err)),
+    }
+
+    Ok(commands)
+}
+
+fn is_k8s_manifest_file(file_uri: &str, content: &str) -> bool {
+    // Must be a YAML file
+    if !(file_uri.ends_with(".yaml") || file_uri.ends_with(".yml")) {
+        return false;
+    }
+
+    // Check for K8s manifest indicators in content
+    // K8s manifests typically have "apiVersion" and "kind" fields
+    content.contains("apiVersion:") && content.contains("kind:")
+}
+
+fn generate_k8s_manifest_commands(url: &Url, content: &str) -> Result<Vec<CommandInfo>, String> {
+    let mut commands = vec![];
+    match parse_k8s_manifest(content) {
         Ok(instructions) => {
             for instruction in instructions {
                 commands.push(
