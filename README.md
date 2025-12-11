@@ -26,7 +26,35 @@ helping you detect vulnerabilities and misconfigurations earlier in the developm
 | K8s Manifest image analysis     | Supported                                                              | [Supported](./docs/features/k8s_manifest_image_analysis.md) (0.8.0+)  |
 | Infrastructure-as-code analysis | Supported                                                              | In roadmap                                                             |
 
-## Build
+## Installation
+
+### Pre-built Binaries (Recommended)
+
+The easiest way to install Sysdig LSP is to download a pre-built binary from the [GitHub Releases](https://github.com/sysdiglabs/sysdig-lsp/releases) page.
+
+1. **Download the binary for your platform:**
+   - Linux x86_64: `sysdig-lsp-linux-amd64`
+   - Linux ARM64: `sysdig-lsp-linux-arm64`
+   - macOS x86_64 (Intel): `sysdig-lsp-darwin-amd64`
+   - macOS ARM64 (Apple Silicon): `sysdig-lsp-darwin-arm64`
+
+2. **Make it executable and move to your PATH:**
+   ```bash
+   # Example for Linux x86_64
+   chmod +x sysdig-lsp-linux-amd64
+   sudo mv sysdig-lsp-linux-amd64 /usr/local/bin/sysdig-lsp
+   ```
+
+3. **Verify the installation:**
+   ```bash
+   sysdig-lsp --version
+   ```
+
+### Building from Source
+
+If you prefer to build from source or need a custom build, see the [Building from Source](#building-from-source) section below.
+
+## Building from Source
 
 Sysdig LSP is developed in Rust and can be built using Cargo or Nix (a flake is provided). Follow these steps for your preferred method:
 
@@ -106,6 +134,10 @@ Add the following configuration to your `languages.toml` file:
 language-servers = ["docker-langserver", "sysdig-lsp"]
 name = "dockerfile"
 
+[[language]]
+language-servers = ["sysdig-lsp"]
+name = "yaml"
+
 [language-server.sysdig-lsp]
 command = "sysdig-lsp"
 
@@ -124,7 +156,7 @@ Navigate to **Settings > Configure Kate > LSP Client > User Server Settings** an
         "01-sysdig-lsp": {
             "command": ["sysdig-lsp"],
             "root": "",
-            "highlightingModeRegex": "^Dockerfile$",
+            "highlightingModeRegex": "^(Dockerfile|YAML)$",
             "initializationOptions": {
                 "sysdig": {
                     "api_url": "https://secure.sysdig.com"
@@ -145,8 +177,18 @@ Navigate to **Settings > Configure Kate > LSP Client > User Server Settings** an
 1. Install the [LSP4IJ](https://plugins.jetbrains.com/plugin/23257-lsp4ij) plugin.
 2. Open the LSP Client config (usually near the Terminal), click **New Language Server** and configure:
    - **Server > Command**: `sysdig-lsp`
-   - **Mappings > File name patterns**: Include `Dockerfile`
-   - **Language ID**: `dockerfile`
+   - **Mappings > Language**:
+     | Language | Language Id |
+     |----------|-------------|
+     | YAML     |             |
+   - **Mappings > File name patterns**:
+     | File name patterns  | Language ID    |
+     |---------------------|----------------|
+     | Dockerfile          | dockerfile     |
+     | docker-compose.yml  | docker-compose |
+     | compose.yml         | docker-compose |
+     | docker-compose.yaml | docker-compose |
+     | compose.yaml        | docker-compose |
    - **Configuration > Initialization Options**:
      ```json
      {
@@ -164,7 +206,7 @@ Add the following to your `coc.nvim` configuration:
 "languageserver": {
   "sysdig-lsp": {
     "command": "sysdig-lsp",
-    "filetypes": ["dockerfile"],
+    "filetypes": ["dockerfile", "yaml"],
     "initializationOptions": {
       "sysdig": {
         "api_url": "https://secure.sysdig.com"
@@ -193,7 +235,7 @@ if not configs.sysdig then
     default_config = {
       cmd = { "sysdig-lsp" },
       root_dir = lspconfig.util.root_pattern(".git"),
-      filetypes = { "dockerfile" },
+      filetypes = { "dockerfile", "yaml" },
       single_file_support = true,
       init_options = {
         sysdig = {
@@ -215,8 +257,8 @@ Refer to the [Neovim LSP configuration guide](https://neovim.io/doc/user/lsp.htm
 ```lua
 vim.lsp.config.sysdig = {
   cmd = {"sysdig-lsp"},
-  root_markers = {"Dockerfile"},
-  filetypes = { "dockerfile" },
+  root_markers = {"Dockerfile", "docker-compose.yml", "compose.yml"},
+  filetypes = { "dockerfile", "yaml" },
   init_options = {
     sysdig = {
       api_url = "https://us2.app.sysdig.com",
