@@ -21,6 +21,7 @@ pub struct SysdigImageScanner {
     url: String,
     api_token: SysdigAPIToken,
     scanner_binary_manager: Arc<Mutex<ScannerBinaryManager>>,
+    docker_host: Option<String>,
 }
 
 #[derive(Clone, Deserialize)]
@@ -68,6 +69,18 @@ impl SysdigImageScanner {
             url,
             api_token,
             scanner_binary_manager: Default::default(),
+            docker_host: None,
+        }
+    }
+
+    /// Creates a new scanner with a specific Docker host.
+    /// The docker_host should be in DOCKER_HOST format (e.g., "unix:///var/run/docker.sock").
+    pub fn with_docker_host(url: String, api_token: SysdigAPIToken, docker_host: String) -> Self {
+        Self {
+            url,
+            api_token,
+            scanner_binary_manager: Default::default(),
+            docker_host: Some(docker_host),
         }
     }
 
@@ -94,7 +107,13 @@ impl SysdigImageScanner {
             self.url.as_str(),
         ];
 
-        let env_vars = [("SECURE_API_TOKEN", self.api_token.0.as_str())];
+        // Build environment variables dynamically
+        let mut env_vars: Vec<(&str, &str)> = vec![("SECURE_API_TOKEN", self.api_token.0.as_str())];
+
+        // Add DOCKER_HOST if we have a socket path configured
+        if let Some(ref docker_host) = self.docker_host {
+            env_vars.push(("DOCKER_HOST", docker_host.as_str()));
+        }
 
         let output = Command::new(path_to_cli)
             .args(args)
