@@ -114,12 +114,28 @@ The result of the compilation will be saved in `./result/bin`.
 
 ## Configuration Options
 
-Sysdig LSP supports two configuration options for connecting to Sysdig’s services:
+Sysdig LSP supports two configuration options for connecting to Sysdig's services:
 
 | **Option**         | **Description**                                                                                            | **Example Value**                       |
 |--------------------|------------------------------------------------------------------------------------------------------------|-----------------------------------------|
 | `sysdig.api_url`   | The URL endpoint for Sysdig's API. Set this to your instance's API endpoint.                               | `https://secure.sysdig.com`             |
 | `sysdig.api_token` | The API token for authentication. If omitted, the `SECURE_API_TOKEN` environment variable is used instead. | `"your token"` (if required)            |
+
+### Docker Socket Discovery
+
+For features that require building Docker images (e.g., "Build and Scan"), Sysdig LSP automatically discovers and connects to available Docker-compatible sockets. The following locations are checked in order:
+
+| **Priority** | **Socket Path**                              | **Description**                           |
+|--------------|----------------------------------------------|-------------------------------------------|
+| 1            | `DOCKER_HOST` env var                        | If set, uses the specified socket/URL     |
+| 2            | `/var/run/docker.sock`                       | Standard Docker socket (Linux/macOS)      |
+| 3            | `$HOME/.colima/docker.sock`                  | Colima Docker socket                      |
+| 4            | `$HOME/.colima/default/docker.sock`          | Colima default profile Docker socket      |
+| 5            | `$HOME/.colima/default/containerd.sock`      | Colima containerd socket (Docker-compat)  |
+| 6            | `$HOME/.lima/default/sock/docker.sock`       | Lima Docker socket                        |
+| 7            | `$XDG_RUNTIME_DIR/podman/podman.sock`        | Podman socket                             |
+
+The first available and connectable socket will be used. If you're using Colima or another Docker-compatible runtime, no additional configuration is needed.
 
 ## Editor Configurations
 
