@@ -1,7 +1,10 @@
 use std::fmt::{Display, Formatter};
 
 use itertools::Itertools;
-use markdown_table::{Heading, HeadingAlignment, MarkdownTable};
+use tabled::{
+    builder::Builder,
+    settings::{Alignment, Style, object::Columns},
+};
 
 use crate::domain::scanresult::scan_result::ScanResult;
 
@@ -22,33 +25,25 @@ impl Display for PolicyEvaluatedTable {
             return f.write_str("");
         }
 
-        let headers = vec![
-            Heading::new("POLICY".to_string(), Some(HeadingAlignment::Left)),
-            Heading::new("STATUS".to_string(), Some(HeadingAlignment::Center)),
-            Heading::new("FAILURES".to_string(), Some(HeadingAlignment::Center)),
-            Heading::new("RISKS ACCEPTED".to_string(), Some(HeadingAlignment::Center)),
-        ];
+        let mut builder = Builder::default();
+        builder.push_record(["POLICY", "STATUS", "FAILURES", "RISKS ACCEPTED"]);
 
-        let data = self
-            .0
-            .iter()
-            .map(|p| {
-                vec![
-                    p.name.clone(),
-                    if p.passed { "✅" } else { "❌" }.to_string(),
-                    p.failures.to_string(),
-                    p.risks_accepted.to_string(),
-                ]
-            })
-            .collect();
+        for p in &self.0 {
+            builder.push_record([
+                p.name.clone(),
+                if p.passed { "✅" } else { "❌" }.to_string(),
+                p.failures.to_string(),
+                p.risks_accepted.to_string(),
+            ]);
+        }
 
-        let mut table = MarkdownTable::new(data);
-        table.with_headings(headers);
+        let mut table = builder.build();
+        table
+            .with(Style::markdown())
+            // STATUS, FAILURES, RISKS ACCEPTED columns (1-3) centered
+            .modify(Columns::new(1..=3), Alignment::center());
 
-        let format = format!(
-            "\n### Policy Evaluation\n\n{}",
-            table.as_markdown().unwrap_or_default()
-        );
+        let format = format!("\n### Policy Evaluation\n\n{}", table);
 
         f.write_str(&format)
     }

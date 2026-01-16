@@ -3,7 +3,10 @@ use std::{
     sync::Arc,
 };
 
-use markdown_table::{Heading, HeadingAlignment, MarkdownTable};
+use tabled::{
+    builder::Builder,
+    settings::{Alignment, Style, object::Columns},
+};
 
 use crate::domain::scanresult::{layer::Layer, scan_result::ScanResult, severity::Severity};
 
@@ -111,69 +114,68 @@ impl Display for FixablePackageTable {
             return f.write_str("");
         }
 
-        let headers = vec![
-            Heading::new("PACKAGE".to_string(), Some(HeadingAlignment::Left)),
-            Heading::new("TYPE".to_string(), Some(HeadingAlignment::Center)),
-            Heading::new("VERSION".to_string(), Some(HeadingAlignment::Left)),
-            Heading::new("SUGGESTED FIX".to_string(), Some(HeadingAlignment::Left)),
-            Heading::new("CRITICAL".to_string(), Some(HeadingAlignment::Center)),
-            Heading::new("HIGH".to_string(), Some(HeadingAlignment::Center)),
-            Heading::new("MEDIUM".to_string(), Some(HeadingAlignment::Center)),
-            Heading::new("LOW".to_string(), Some(HeadingAlignment::Center)),
-            Heading::new("NEGLIGIBLE".to_string(), Some(HeadingAlignment::Center)),
-            Heading::new("EXPLOIT".to_string(), Some(HeadingAlignment::Center)),
-        ];
+        let mut builder = Builder::default();
+        builder.push_record([
+            "PACKAGE",
+            "TYPE",
+            "VERSION",
+            "SUGGESTED FIX",
+            "CRITICAL",
+            "HIGH",
+            "MEDIUM",
+            "LOW",
+            "NEGLIGIBLE",
+            "EXPLOIT",
+        ]);
 
-        let data = self
-            .0
-            .iter()
-            .map(|p| {
-                vec![
-                    p.name.clone(),
-                    p.package_type.clone(),
-                    p.version.clone(),
-                    p.suggested_fix.clone().unwrap_or_default(),
-                    if p.vulnerabilities.critical > 0 {
-                        p.vulnerabilities.critical.to_string()
-                    } else {
-                        "-".to_string()
-                    },
-                    if p.vulnerabilities.high > 0 {
-                        p.vulnerabilities.high.to_string()
-                    } else {
-                        "-".to_string()
-                    },
-                    if p.vulnerabilities.medium > 0 {
-                        p.vulnerabilities.medium.to_string()
-                    } else {
-                        "-".to_string()
-                    },
-                    if p.vulnerabilities.low > 0 {
-                        p.vulnerabilities.low.to_string()
-                    } else {
-                        "-".to_string()
-                    },
-                    if p.vulnerabilities.negligible > 0 {
-                        p.vulnerabilities.negligible.to_string()
-                    } else {
-                        "-".to_string()
-                    },
-                    if p.exploits > 0 {
-                        p.exploits.to_string()
-                    } else {
-                        "-".to_string()
-                    },
-                ]
-            })
-            .collect();
+        for p in &self.0 {
+            builder.push_record([
+                p.name.clone(),
+                p.package_type.clone(),
+                p.version.clone(),
+                p.suggested_fix.clone().unwrap_or_default(),
+                if p.vulnerabilities.critical > 0 {
+                    p.vulnerabilities.critical.to_string()
+                } else {
+                    "-".to_string()
+                },
+                if p.vulnerabilities.high > 0 {
+                    p.vulnerabilities.high.to_string()
+                } else {
+                    "-".to_string()
+                },
+                if p.vulnerabilities.medium > 0 {
+                    p.vulnerabilities.medium.to_string()
+                } else {
+                    "-".to_string()
+                },
+                if p.vulnerabilities.low > 0 {
+                    p.vulnerabilities.low.to_string()
+                } else {
+                    "-".to_string()
+                },
+                if p.vulnerabilities.negligible > 0 {
+                    p.vulnerabilities.negligible.to_string()
+                } else {
+                    "-".to_string()
+                },
+                if p.exploits > 0 {
+                    p.exploits.to_string()
+                } else {
+                    "-".to_string()
+                },
+            ]);
+        }
 
-        let mut table = MarkdownTable::new(data);
-        table.with_headings(headers);
+        let mut table = builder.build();
+        table
+            .with(Style::markdown())
+            // TYPE column (index 1) centered
+            .modify(Columns::new(1..=1), Alignment::center())
+            // Severity columns (4-8) and EXPLOIT (9) centered
+            .modify(Columns::new(4..=9), Alignment::center());
 
-        let format = format!(
-            "\n### Fixable Packages\n{}",
-            table.as_markdown().unwrap_or_default()
-        );
+        let format = format!("\n### Fixable Packages\n{}", table);
 
         f.write_str(&format)
     }
