@@ -89,6 +89,12 @@ Key components:
 * **`DockerImageBuilder`**
   * Builds container images using Bollard (Docker API client).
 
+* **`docker_socket_discovery`**
+  * Automatically discovers and connects to Docker-compatible sockets.
+  * Supports multiple socket locations: standard Docker, Colima, Lima, containerd, and Podman.
+  * Checks sockets in priority order: `DOCKER_HOST` env var, `/var/run/docker.sock`, `$HOME/.colima/docker.sock`, `$HOME/.colima/default/docker.sock`, `$HOME/.colima/default/containerd.sock`, `$HOME/.lima/default/sock/docker.sock`, and `$XDG_RUNTIME_DIR/podman/podman.sock`.
+  * Uses the first available and connectable socket.
+
 * **Dockerfile / Compose / K8s Manifest AST Parsers**
   * Parse Dockerfiles to extract image references from `FROM` instructions (including multi-stage builds).
   * Parse Docker Compose YAML (e.g. service `image:` fields).

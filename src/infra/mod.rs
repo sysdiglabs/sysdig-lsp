@@ -1,6 +1,7 @@
 mod component_factory_impl;
 mod compose_ast_parser;
 mod docker_image_builder;
+mod docker_socket_discovery;
 mod dockerfile_ast_parser;
 mod k8s_manifest_ast_parser;
 mod scanner_binary_manager;
@@ -12,5 +13,6 @@ pub mod lsp_logger;
 pub use component_factory_impl::ConcreteComponentFactory;
 pub use compose_ast_parser::parse_compose_file;
 pub use docker_image_builder::DockerImageBuilder;
+pub use docker_socket_discovery::connect_to_docker;
 pub use dockerfile_ast_parser::parse_dockerfile;
 pub use k8s_manifest_ast_parser::parse_k8s_manifest;

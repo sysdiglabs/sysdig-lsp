@@ -123,17 +123,15 @@ impl ImageBuilder for DockerImageBuilder {
 mod tests {
     use std::{path::PathBuf, str::FromStr};
 
-    use bollard::Docker;
-
     use crate::{
         app::{ImageBuildError, ImageBuilder},
-        infra::DockerImageBuilder,
+        infra::{DockerImageBuilder, connect_to_docker},
     };
 
     #[tokio::test]
     async fn it_builds_a_dockerfile() {
-        let docker_client = Docker::connect_with_local_defaults().unwrap();
-        let image_builder = DockerImageBuilder::new(docker_client);
+        let docker_connection = connect_to_docker().unwrap();
+        let image_builder = DockerImageBuilder::new(docker_connection.client);
 
         let image_built = image_builder
             .build_image(&PathBuf::from_str("tests/fixtures/Dockerfile").unwrap())
@@ -150,8 +148,8 @@ mod tests {
 
     #[tokio::test]
     async fn it_builds_a_containerfile() {
-        let docker_client = Docker::connect_with_local_defaults().unwrap();
-        let image_builder = DockerImageBuilder::new(docker_client);
+        let docker_connection = connect_to_docker().unwrap();
+        let image_builder = DockerImageBuilder::new(docker_connection.client);
 
         let image_built = image_builder
             .build_image(&PathBuf::from_str("tests/fixtures/Containerfile").unwrap())
@@ -168,8 +166,8 @@ mod tests {
 
     #[tokio::test]
     async fn it_fails_to_build_non_existent_dockerfile() {
-        let docker_client = Docker::connect_with_local_defaults().unwrap();
-        let image_builder = DockerImageBuilder::new(docker_client);
+        let docker_connection = connect_to_docker().unwrap();
+        let image_builder = DockerImageBuilder::new(docker_connection.client);
 
         let image_built = image_builder
             .build_image(&PathBuf::from_str("tests/fixtures/Nonexistent.dockerfile").unwrap())
@@ -184,8 +182,8 @@ mod tests {
 
     #[tokio::test]
     async fn it_builds_an_invalid_dockerfile_and_fails() {
-        let docker_client = Docker::connect_with_local_defaults().unwrap();
-        let image_builder = DockerImageBuilder::new(docker_client);
+        let docker_connection = connect_to_docker().unwrap();
+        let image_builder = DockerImageBuilder::new(docker_connection.client);
 
         let image_built = image_builder
             .build_image(&PathBuf::from_str("tests/fixtures/Invalid.dockerfile").unwrap())
