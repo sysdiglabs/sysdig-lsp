@@ -1,6 +1,9 @@
 use std::fmt::{Display, Formatter};
 
-use markdown_table::{Heading, HeadingAlignment, MarkdownTable};
+use tabled::{
+    builder::Builder,
+    settings::{Alignment, Style},
+};
 
 use crate::domain::scanresult::{scan_result::ScanResult, severity::Severity};
 
@@ -67,18 +70,6 @@ impl From<&ScanResult> for MarkdownSummaryTable {
 
 impl Display for MarkdownSummaryTable {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        let headers = vec![
-            Heading::new(
-                "TOTAL VULNS FOUND".to_string(),
-                Some(HeadingAlignment::Center),
-            ),
-            Heading::new("CRITICAL".to_string(), Some(HeadingAlignment::Center)),
-            Heading::new("HIGH".to_string(), Some(HeadingAlignment::Center)),
-            Heading::new("MEDIUM".to_string(), Some(HeadingAlignment::Center)),
-            Heading::new("LOW".to_string(), Some(HeadingAlignment::Center)),
-            Heading::new("NEGLIGIBLE".to_string(), Some(HeadingAlignment::Center)),
-        ];
-
         let summary_vulns_line = |total_vulns: u32, fixable_vulns: u32| {
             if fixable_vulns > 0 {
                 format!("{} ({} Fixable)", total_vulns, fixable_vulns)
@@ -87,18 +78,27 @@ impl Display for MarkdownSummaryTable {
             }
         };
 
-        let data = vec![vec![
+        let mut builder = Builder::default();
+        builder.push_record([
+            "TOTAL VULNS FOUND",
+            "CRITICAL",
+            "HIGH",
+            "MEDIUM",
+            "LOW",
+            "NEGLIGIBLE",
+        ]);
+        builder.push_record([
             self.total_found.to_string(),
             summary_vulns_line(self.critical, self.critical_fixable),
             summary_vulns_line(self.high, self.high_fixable),
             summary_vulns_line(self.medium, self.medium_fixable),
             summary_vulns_line(self.low, self.low_fixable),
             summary_vulns_line(self.negligible, self.negligible_fixable),
-        ]];
+        ]);
 
-        let mut table = MarkdownTable::new(data);
-        table.with_headings(headers);
+        let mut table = builder.build();
+        table.with(Style::markdown()).with(Alignment::center());
 
-        f.write_str(&table.as_markdown().unwrap_or_default())
+        f.write_str(&table.to_string())
     }
 }

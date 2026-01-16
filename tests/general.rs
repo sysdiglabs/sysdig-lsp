@@ -396,24 +396,21 @@ async fn test_hover(
 * **Digest**: `sha256:67890`
 * **BaseOS**: alpine:3.18
 
-| TOTAL VULNS FOUND | CRITICAL | HIGH        | MEDIUM | LOW | NEGLIGIBLE |
-| :-------------: | :----: | :---------: | :--: | :-: | :------: |
-| 1               | 0      | 1 (1 Fixable) | 0    | 0   | 0        |
-
+| TOTAL VULNS FOUND | CRITICAL |     HIGH      | MEDIUM | LOW | NEGLIGIBLE |
+|-------------------|----------|---------------|--------|-----|------------|
+|         1         |    0     | 1 (1 Fixable) |   0    |  0  |     0      |
 
 ### Fixable Packages
-| PACKAGE | TYPE | VERSION | SUGGESTED FIX | CRITICAL | HIGH | MEDIUM | LOW | NEGLIGIBLE | EXPLOIT |
-| :----- | :-: | :---- | :---------- | :----: | :-: | :--: | :-: | :------: | :---: |
-| package1 | os  | 1.0.0 | 1.0.1       | -      | 1   | -    | -   | -        | -     |
-
+| PACKAGE  | TYPE | VERSION | SUGGESTED FIX | CRITICAL | HIGH | MEDIUM | LOW | NEGLIGIBLE | EXPLOIT |
+|----------|------|---------|---------------|----------|------|--------|-----|------------|---------|
+| package1 |  os  | 1.0.0   | 1.0.1         |    -     |  1   |   -    |  -  |     -      |    -    |
 
 
 ### Vulnerability Detail
 
-| VULN CVE    | SEVERITY | PACKAGES | FIXABLE | EXPLOITABLE | ACCEPTED RISK |
-| :---------- | :----- | :----- | :---- | :-------- | :---------- |
-| CVE-2021-1234 | High   | 1      | ✅    | ❌        | ❌          |
-"#;
+| VULN CVE      | SEVERITY | PACKAGES | FIXABLE | EXPLOITABLE | ACCEPTED RISK |
+|---------------|----------|----------|---------|-------------|---------------|
+| CVE-2021-1234 | High     | 1        | ✅      | ❌          | ❌            |"#;
 
     let expected_json = serde_json::json!({
         "contents": {

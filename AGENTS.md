@@ -517,6 +517,7 @@ To keep history clean and reviews manageable:
   * `feat(scope): message`
   * `fix(scope): message`
   * `refactor: message`
+* Commits should only have a title, no body/description.
 * Before opening a commit, run at least:
   * `just fmt`
   * `just lint`
