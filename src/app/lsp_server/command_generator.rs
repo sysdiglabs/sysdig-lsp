@@ -127,8 +127,7 @@ fn generate_dockerfile_commands(uri: &Url, content: &str) -> Vec<CommandInfo> {
     let instructions = parse_dockerfile(content);
     if let Some(last_from_instruction) = instructions
         .iter()
-        .filter(|instruction| instruction.keyword == "FROM")
-        .next_back()
+        .rfind(|instruction| instruction.keyword == "FROM")
     {
         let range = last_from_instruction.range;
         commands.push(
