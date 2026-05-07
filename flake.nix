@@ -2,16 +2,19 @@
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
     flake-utils.url = "github:numtide/flake-utils";
+    naersk.url = "github:nix-community/naersk"; # Allows rust build caching
   };
   outputs =
     {
       self,
       nixpkgs,
       flake-utils,
+      naersk,
     }:
     let
       overlays.default = final: prev: {
         sysdig-lsp = prev.callPackage ./package.nix { };
+        naersk = prev.callPackage naersk { };
       };
 
       flake = flake-utils.lib.eachDefaultSystem (

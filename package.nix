@@ -1,5 +1,5 @@
 {
-  rustPlatform,
+  naersk,
   pkgsStatic,
   lib,
   stdenv,
@@ -9,13 +9,10 @@
 let
   cargoFile = builtins.fromTOML (builtins.readFile ./Cargo.toml);
 in
-rustPlatform.buildRustPackage {
+naersk.buildPackage {
   pname = cargoFile.package.name;
   version = cargoFile.package.version;
   src = ./.;
-  cargoLock = {
-    lockFile = ./Cargo.lock;
-  };
 
   nativeBuildInputs = [
     pkg-config
@@ -23,7 +20,8 @@ rustPlatform.buildRustPackage {
 
   buildInputs = [
     openssl.dev
-  ] ++ lib.optionals stdenv.hostPlatform.isDarwin (with pkgsStatic; [ libiconv ]);
+  ]
+  ++ lib.optionals stdenv.hostPlatform.isDarwin (with pkgsStatic; [ libiconv ]);
 
   doCheck = false;
   meta.mainProgram = "sysdig-lsp";
