@@ -1,5 +1,5 @@
 {
-  naersk,
+  rustPlatform,
   pkgsStatic,
   lib,
   stdenv,
@@ -9,10 +9,13 @@
 let
   cargoFile = builtins.fromTOML (builtins.readFile ./Cargo.toml);
 in
-naersk.buildPackage {
+rustPlatform.buildRustPackage {
   pname = cargoFile.package.name;
   version = cargoFile.package.version;
   src = ./.;
+  cargoLock = {
+    lockFile = ./Cargo.lock;
+  };
 
   nativeBuildInputs = [
     pkg-config
