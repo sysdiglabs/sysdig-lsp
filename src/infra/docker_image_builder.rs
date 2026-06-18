@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use bollard::{Docker, body_full, query_parameters::BuildImageOptionsBuilder, secret::BuildInfo};
+use bollard::{Docker, body_full, config::BuildInfo, query_parameters::BuildImageOptionsBuilder};
 use bytes::Bytes;
 use futures::StreamExt;
 use thiserror::Error;
@@ -71,7 +71,7 @@ impl DockerImageBuilder {
         while let Some(result) = results.next().await {
             match result {
                 Ok(BuildInfo {
-                    aux: Some(aux_info @ bollard::secret::ImageId { id: Some(_), .. }),
+                    aux: Some(aux_info @ bollard::config::ImageId { id: Some(_), .. }),
                     ..
                 }) => {
                     if let Some(image_id) = aux_info.id {
