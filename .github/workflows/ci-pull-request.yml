@@ -19,6 +19,13 @@ jobs:
       - name: Install nix
         uses: DeterminateSystems/nix-installer-action@main
 
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ci
+          add-job-id-key: false
+          cmd-format: nix develop -c {0}
+
       - name: Run lint
         run: |
           just lint
@@ -36,6 +43,13 @@ jobs:
       - name: Install nix
         uses: DeterminateSystems/nix-installer-action@main
 
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ci
+          add-job-id-key: false
+          cmd-format: nix develop -c {0}
+
       - name: Run pre-commit
         run: |
           pre-commit run -a
@@ -52,6 +66,13 @@ jobs:
 
       - name: Install nix
         uses: DeterminateSystems/nix-installer-action@main
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ci
+          add-job-id-key: false
+          cmd-format: nix develop -c {0}
 
       - name: Run tests
         run: |

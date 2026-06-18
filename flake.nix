@@ -58,7 +58,7 @@
               inputsFrom = [ sysdig-lsp ];
 
               shellHook = ''
-                pre-commit install
+                pre-commit install 1>&2
                 export PATH="$PWD/target/debug:$PWD/target/release:$PATH"
               '';
 
