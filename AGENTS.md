@@ -168,9 +168,6 @@ The project uses `just` as a command runner to encapsulate common workflows.
 * `just fix`
   * Runs `cargo fix` and `cargo machete` / `cargo machete --fix` to clean up unused dependencies and minor issues.
 
-* `just watch`
-  * Provides a watch mode to run tests (or other commands) on file changes.
-
 Additional helpful commands:
 
 * `cargo test -- --nocapture` – run tests with full output when debugging.

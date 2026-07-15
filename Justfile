@@ -16,9 +16,6 @@ lint:
     cargo check
     cargo clippy
 
-watch:
-    cargo watch -x "nextest run"
-
 update:
     nix flake update
     nix develop --command cargo update

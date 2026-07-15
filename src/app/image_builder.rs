@@ -7,6 +7,7 @@ pub trait ImageBuilder {
     async fn build_image(&self, containerfile: &Path) -> Result<ImageBuildResult, ImageBuildError>;
 }
 
+#[derive(Debug)]
 pub struct ImageBuildResult {
     // FIXME(fede): Eventually we will need to check if this dead code is actually needed for our use case
     #[allow(dead_code)]
