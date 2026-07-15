@@ -24,7 +24,19 @@ helping you detect vulnerabilities and misconfigurations earlier in the developm
 | Docker-compose image analysis   | Supported                                                              | [Supported](./docs/features/docker_compose_image_analysis.md) (0.6.0+) |
 | Vulnerability explanation       | Supported                                                              | [Supported](./docs/features/vulnerability_explanation.md) (0.7.0+)     |
 | K8s Manifest image analysis     | Supported                                                              | [Supported](./docs/features/k8s_manifest_image_analysis.md) (0.8.0+)  |
-| Infrastructure-as-code analysis | Supported                                                              | In roadmap                                                             |
+| Infrastructure-as-code analysis | Supported                                                              | [Supported](./docs/features/iac_scan.md) (0.9.0+)                      |
+| Structured scan results for clients (tree view data) | Supported                                        | [In roadmap](./docs/roadmap.md#structured-scan-results-for-clients)    |
+| Policy evaluation results       | Supported                                                              | [Supported](./docs/features/vulnerability_explanation.md) (0.7.0+)     |
+| Scan arbitrary image (without document) | Supported                                                      | [In roadmap](./docs/roadmap.md#scan-arbitrary-image)                   |
+| Scan result summary notification (status bar data) | Supported                                          | [In roadmap](./docs/roadmap.md#scan-result-summary-notification)       |
+| Link to scan results in Sysdig Secure | Supported                                                        | [In roadmap](./docs/roadmap.md#link-to-scan-results-in-sysdig-secure)  |
+| Standalone / offline mode       | Supported                                                              | [In roadmap](./docs/roadmap.md#standalone--offline-mode)               |
+| Upload scan results to Sysdig Secure | Supported                                                         | [In roadmap](./docs/roadmap.md#upload-scan-results-to-sysdig-secure)   |
+| Custom policies configuration   | Supported                                                              | [In roadmap](./docs/roadmap.md#custom-policies-configuration)          |
+| Configurable report detail level | Supported                                                             | [In roadmap](./docs/roadmap.md#configurable-report-detail-level)       |
+| Custom CLI scanner source       | Supported                                                              | [In roadmap](./docs/roadmap.md#custom-cli-scanner-source)              |
+| Scan whole manifest at once     | Supported                                                              | [In roadmap](./docs/roadmap.md#scan-whole-manifest)                    |
+| Build args support in Build and Scan | Supported                                                         | [In roadmap](./docs/roadmap.md#build-args-support-in-build-and-scan)   |
 
 ## Installation
 
@@ -175,13 +187,16 @@ Navigate to **Settings > Configure Kate > LSP Client > User Server Settings** an
             "highlightingModeRegex": "^(Dockerfile|YAML)$",
             "initializationOptions": {
                 "sysdig": {
-                    "api_url": "https://secure.sysdig.com"
+                    "api_url": "https://secure.sysdig.com",
+                    "api_token": "your token"
                 }
             }
         }
     }
 }
 ```
+
+If `sysdig.api_token` is omitted, the token is read from the `SECURE_API_TOKEN` environment variable instead.
 
 ### JetBrains IDEs
 
@@ -209,10 +224,13 @@ Navigate to **Settings > Configure Kate > LSP Client > User Server Settings** an
      ```json
      {
        "sysdig": {
-         "api_url": "https://secure.sysdig.com"
+         "api_url": "https://secure.sysdig.com",
+         "api_token": "your token"
        }
      }
      ```
+     If `sysdig.api_token` is omitted, the token is read from the `SECURE_API_TOKEN` environment variable instead.
+     Note that the IDE must be launched from an environment where the variable is set (e.g. from a terminal), otherwise it won't see it.
 
 ### Vim with coc.nvim (to be reviewed)
 
@@ -225,12 +243,15 @@ Add the following to your `coc.nvim` configuration:
     "filetypes": ["dockerfile", "yaml"],
     "initializationOptions": {
       "sysdig": {
-        "api_url": "https://secure.sysdig.com"
+        "api_url": "https://secure.sysdig.com",
+        "api_token": "your token"
       }
     }
   }
 }
 ```
+
+If `sysdig.api_token` is omitted, the token is read from the `SECURE_API_TOKEN` environment variable instead.
 
 ### Neovim with nvim-lspconfig
 
@@ -256,7 +277,7 @@ if not configs.sysdig then
       init_options = {
         sysdig = {
           api_url = "https://us2.app.sysdig.com",
-          -- api_token = "my_token", -- if not specified, will be retrieved from the SYSDIG_API_TOKEN env var.
+          -- api_token = "my_token", -- if not specified, will be retrieved from the SECURE_API_TOKEN env var.
         },
       },
     },
@@ -278,7 +299,7 @@ vim.lsp.config.sysdig = {
   init_options = {
     sysdig = {
       api_url = "https://us2.app.sysdig.com",
-      -- api_token = "my_token", -- if not specified, will be retrieved from the SYSDIG_API_TOKEN env var.
+      -- api_token = "my_token", -- if not specified, will be retrieved from the SECURE_API_TOKEN env var.
     },
   },
 }

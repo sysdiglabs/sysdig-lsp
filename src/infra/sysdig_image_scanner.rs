@@ -12,7 +12,10 @@ use crate::{
 };
 
 use super::{
-    scanner_binary_manager::{ScannerBinaryManager, ScannerBinaryManagerError},
+    scanner_binary_manager::{
+        SCANNER_EXIT_CODE_INTERNAL_ERROR, SCANNER_EXIT_CODE_INVALID_PARAMS, ScannerBinaryManager,
+        ScannerBinaryManagerError,
+    },
     sysdig_image_scanner_json_scan_result_v1::JsonScanResultV1,
 };
 
@@ -75,11 +78,17 @@ impl SysdigImageScanner {
 
     /// Creates a new scanner with a specific Docker host.
     /// The docker_host should be in DOCKER_HOST format (e.g., "unix:///var/run/docker.sock").
-    pub fn with_docker_host(url: String, api_token: SysdigAPIToken, docker_host: String) -> Self {
+    /// The scanner binary manager is shared so every scanner reuses the same CLI binary installation.
+    pub(super) fn with_docker_host(
+        url: String,
+        api_token: SysdigAPIToken,
+        docker_host: String,
+        scanner_binary_manager: Arc<Mutex<ScannerBinaryManager>>,
+    ) -> Self {
         Self {
             url,
             api_token,
-            scanner_binary_manager: Default::default(),
+            scanner_binary_manager,
             docker_host: Some(docker_host),
         }
     }
@@ -118,18 +127,28 @@ impl SysdigImageScanner {
         let output = Command::new(path_to_cli)
             .args(args)
             .envs(env_vars)
+            // Don't leave the scanner running if the LSP request is cancelled.
+            .kill_on_drop(true)
             .output()
             .await?;
 
-        match output.status.code().unwrap_or(0) {
-            2 => {
+        match output.status.code() {
+            Some(SCANNER_EXIT_CODE_INVALID_PARAMS) => {
                 return Err(SysdigImageScannerError::InvalidParametersProvided(
                     String::from_utf8_lossy(&output.stderr).to_string(),
                 ));
             }
-            3 => {
+            Some(SCANNER_EXIT_CODE_INTERNAL_ERROR) => {
                 return Err(SysdigImageScannerError::InternalScannerExecutionError(
                     String::from_utf8_lossy(&output.stderr).to_string(),
+                ));
+            }
+            None => {
+                return Err(SysdigImageScannerError::InternalScannerExecutionError(
+                    format!(
+                        "scanner terminated by a signal: {}",
+                        String::from_utf8_lossy(&output.stderr)
+                    ),
                 ));
             }
             _ => {}

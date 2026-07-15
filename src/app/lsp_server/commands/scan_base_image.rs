@@ -1,14 +1,17 @@
+use std::collections::HashMap;
+
 use itertools::Itertools;
 use tower_lsp::lsp_types::{Diagnostic, DiagnosticSeverity, Location, MessageType};
 
 use crate::{
     app::{
-        ImageScanner, LSPClient, LspInteractor, lsp_server::WithContext, markdown::MarkdownData,
+        DiagnosticsScope, ImageScanner, LSPClient, LspInteractor, lsp_server::WithContext,
+        markdown::MarkdownData,
     },
     domain::scanresult::severity::Severity,
 };
 
-use super::LspCommand;
+use super::{LspCommand, VULN_DIAGNOSTIC_SOURCE};
 
 pub struct ScanBaseImageCommand<'a, C, S: ?Sized>
 where
@@ -72,6 +75,7 @@ where
                 range: self.location.range,
                 severity: Some(DiagnosticSeverity::HINT),
                 message: "No vulnerabilities found.".to_owned(),
+                source: Some(VULN_DIAGNOSTIC_SOURCE.to_owned()),
                 ..Default::default()
             };
 
@@ -110,10 +114,13 @@ where
         };
 
         let uri = self.location.uri.as_str();
-        self.interactor.remove_diagnostics(uri).await;
         self.interactor.remove_documentations(uri).await;
         self.interactor
-            .append_document_diagnostics(uri, &[diagnostic])
+            .replace_diagnostics_with_source(
+                VULN_DIAGNOSTIC_SOURCE,
+                DiagnosticsScope::Document(uri),
+                HashMap::from([(uri.to_owned(), vec![diagnostic])]),
+            )
             .await;
         self.interactor.publish_all_diagnostics().await?;
         self.interactor

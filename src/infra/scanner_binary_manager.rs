@@ -35,6 +35,10 @@ pub(in crate::infra) enum ScannerBinaryManagerError {
     HTTPError(#[from] reqwest::Error),
 }
 
+/// Exit codes of the Sysdig CLI scanner, shared by every scan mode.
+pub(super) const SCANNER_EXIT_CODE_INVALID_PARAMS: i32 = 2;
+pub(super) const SCANNER_EXIT_CODE_INTERNAL_ERROR: i32 = 3;
+
 #[derive(Clone, Default)]
 pub(super) struct ScannerBinaryManager {}
 

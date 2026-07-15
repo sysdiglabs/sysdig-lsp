@@ -4,7 +4,7 @@ use serde::Deserialize;
 use thiserror::Error;
 use tower_lsp::jsonrpc::{Error as LspError, ErrorCode};
 
-use super::{ImageBuilder, ImageScanner};
+use super::{IacScanner, ImageBuilder, ImageScanner};
 
 #[derive(Clone, Debug, Default, Deserialize)]
 pub struct Config {
@@ -22,6 +22,7 @@ pub struct SysdigConfig {
 pub struct Components {
     pub scanner: Box<dyn ImageScanner + Send + Sync>,
     pub builder: Box<dyn ImageBuilder + Send + Sync>,
+    pub iac_scanner: Box<dyn IacScanner + Send + Sync>,
 }
 
 pub trait ComponentFactory: Send + Sync {

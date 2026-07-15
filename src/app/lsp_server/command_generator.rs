@@ -27,6 +27,13 @@ impl From<SupportedCommands> for CommandInfo {
                 arguments: Some(vec![json!(location)]),
                 range: location.range,
             },
+
+            SupportedCommands::ExecuteIacScan { uri } => CommandInfo {
+                title: "Scan IaC file".to_owned(),
+                command: value.as_string_command(),
+                arguments: uri.as_ref().map(|u| vec![json!(u)]),
+                range: Range::default(),
+            },
         }
     }
 }
@@ -55,7 +62,7 @@ impl From<CommandInfo> for CodeLens {
     }
 }
 
-pub fn generate_commands_for_uri(uri: &Url, content: &str) -> Result<Vec<CommandInfo>, String> {
+pub fn generate_commands_for_uri(uri: &Url, content: &str) -> Vec<CommandInfo> {
     let file_uri = uri.as_str();
 
     if file_uri.contains("docker-compose.yml")
@@ -67,12 +74,14 @@ pub fn generate_commands_for_uri(uri: &Url, content: &str) -> Result<Vec<Command
     } else if is_k8s_manifest_file(file_uri, content) {
         generate_k8s_manifest_commands(uri, content)
     } else {
-        Ok(generate_dockerfile_commands(uri, content))
+        generate_dockerfile_commands(uri, content)
     }
 }
 
-fn generate_compose_commands(url: &Url, content: &str) -> Result<Vec<CommandInfo>, String> {
-    let mut commands = vec![];
+fn generate_compose_commands(url: &Url, content: &str) -> Vec<CommandInfo> {
+    // The IaC scan doesn't need parseable image instructions: the CLI scanner
+    // parses the file itself, so the lens is offered even if image parsing fails.
+    let mut commands = vec![iac_scan_command_for(url)];
     match parse_compose_file(content) {
         Ok(instructions) => {
             for instruction in instructions {
@@ -85,10 +94,17 @@ fn generate_compose_commands(url: &Url, content: &str) -> Result<Vec<CommandInfo
                 );
             }
         }
-        Err(err) => return Err(format!("{}", err)),
+        Err(err) => tracing::warn!("unable to generate image scan commands: {err}"),
     }
 
-    Ok(commands)
+    commands
+}
+
+fn iac_scan_command_for(url: &Url) -> CommandInfo {
+    SupportedCommands::ExecuteIacScan {
+        uri: Some(url.clone()),
+    }
+    .into()
 }
 
 fn is_k8s_manifest_file(file_uri: &str, content: &str) -> bool {
@@ -102,8 +118,9 @@ fn is_k8s_manifest_file(file_uri: &str, content: &str) -> bool {
     content.contains("apiVersion:") && content.contains("kind:")
 }
 
-fn generate_k8s_manifest_commands(url: &Url, content: &str) -> Result<Vec<CommandInfo>, String> {
-    let mut commands = vec![];
+fn generate_k8s_manifest_commands(url: &Url, content: &str) -> Vec<CommandInfo> {
+    // See generate_compose_commands: the IaC lens is independent of image parsing.
+    let mut commands = vec![iac_scan_command_for(url)];
     match parse_k8s_manifest(content) {
         Ok(instructions) => {
             for instruction in instructions {
@@ -116,10 +133,10 @@ fn generate_k8s_manifest_commands(url: &Url, content: &str) -> Result<Vec<Comman
                 );
             }
         }
-        Err(err) => return Err(format!("{}", err)),
+        Err(err) => tracing::warn!("unable to generate image scan commands: {err}"),
     }
 
-    Ok(commands)
+    commands
 }
 
 fn generate_dockerfile_commands(uri: &Url, content: &str) -> Vec<CommandInfo> {

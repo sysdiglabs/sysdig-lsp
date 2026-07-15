@@ -1,4 +1,4 @@
-use std::{path::PathBuf, str::FromStr, sync::Arc};
+use std::{collections::HashMap, path::PathBuf, str::FromStr, sync::Arc};
 
 use itertools::Itertools;
 use tower_lsp::jsonrpc::Result;
@@ -8,12 +8,15 @@ use tower_lsp::lsp_types::{
 
 use crate::app::markdown::{MarkdownData, MarkdownLayerData};
 use crate::{
-    app::{ImageBuilder, ImageScanner, LSPClient, LspInteractor, lsp_server::WithContext},
+    app::{
+        DiagnosticsScope, ImageBuilder, ImageScanner, LSPClient, LspInteractor,
+        lsp_server::WithContext,
+    },
     domain::scanresult::{layer::Layer, scan_result::ScanResult, severity::Severity},
     infra::parse_dockerfile,
 };
 
-use super::LspCommand;
+use super::{LspCommand, VULN_DIAGNOSTIC_SOURCE};
 
 pub struct BuildAndScanCommand<'a, C, B: ?Sized, S: ?Sized>
 where
@@ -112,13 +115,17 @@ where
         let (diagnostics_per_layer, docs_per_layer) =
             diagnostics_for_layers(&document_text, &scan_result)?;
 
-        self.interactor.remove_diagnostics(uri).await;
+        let mut diagnostics = Vec::with_capacity(1 + diagnostics_per_layer.len());
+        diagnostics.push(diagnostic);
+        diagnostics.extend(diagnostics_per_layer);
+
         self.interactor.remove_documentations(uri).await;
         self.interactor
-            .append_document_diagnostics(uri, &[diagnostic])
-            .await;
-        self.interactor
-            .append_document_diagnostics(uri, &diagnostics_per_layer)
+            .replace_diagnostics_with_source(
+                VULN_DIAGNOSTIC_SOURCE,
+                DiagnosticsScope::Document(uri),
+                HashMap::from([(uri.to_owned(), diagnostics)]),
+            )
             .await;
         self.interactor
             .append_documentation(
@@ -174,6 +181,7 @@ pub fn diagnostics_for_layers(
                 range: instr.range,
                 severity: Some(DiagnosticSeverity::WARNING),
                 message: msg,
+                source: Some(VULN_DIAGNOSTIC_SOURCE.to_owned()),
                 ..Default::default()
             };
 
@@ -214,6 +222,7 @@ fn fill_vulnerability_hints_for_layer(
                 vuln.severity(),
                 url
             ),
+            source: Some(VULN_DIAGNOSTIC_SOURCE.to_owned()),
             ..Default::default()
         });
     });
@@ -236,6 +245,7 @@ fn diagnostic_for_image(line: u32, document_text: &str, scan_result: &ScanResult
         range: range_for_selected_line,
         severity: Some(DiagnosticSeverity::HINT),
         message: "No vulnerabilities found.".to_owned(),
+        source: Some(VULN_DIAGNOSTIC_SOURCE.to_owned()),
         ..Default::default()
     };
 

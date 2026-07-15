@@ -38,13 +38,14 @@ The project follows a modular, three-layer, Hexagonal-like architecture that cle
   * `tests/common.rs`
   * `tests/fixtures/` (sample Dockerfiles, scan results, etc.)
 * Documentation for user-facing capabilities is under `docs/features/`.
+* Planned features are described in `docs/roadmap.md`; each entry is linked from the README feature table. When a roadmap feature is implemented, move its section to a `docs/features/*.md` document and update the README table with the release version.
 * Build tooling and shortcuts are defined in `Justfile` and `flake.nix`.
 
 ### 2.2 Domain Layer (`src/domain/`)
 
 The domain layer contains pure business logic and domain models.
 
-Key module:
+Key modules:
 
 * `scanresult/`: defines core entities and value objects:
   * `ScanResult`: core aggregate representing a full scan result.
@@ -53,6 +54,11 @@ Key module:
   * `Layer`: container image layer information.
   * `Policy`: policy evaluation results.
   * Value objects such as `Severity`, `Architecture`, `OperatingSystem`.
+* `iacscanresult/`: light domain model for IaC scan results:
+  * `IacScanResult`: aggregate with the list of findings.
+  * `IacFinding`: rule name, severity, affected resources.
+  * `IacResource`: source file, location, resource type and name.
+  * `IacSeverity`: High/Medium/Low/Unknown value object.
 
 ### 2.3 Application Layer (`src/app/`)
 
@@ -62,12 +68,13 @@ Key components:
 
 * **`LSPServer` (`lsp_server/`)** – main LSP implementation built on `tower-lsp`:
   * `lsp_server_inner.rs`: core LSP protocol handlers (initialize, text sync, code lenses, commands, diagnostics, hover, etc.).
-  * `commands/`: concrete LSP command implementations (e.g. `scan_base_image`, `build_and_scan`).
+  * `commands/`: concrete LSP command implementations (e.g. `scan_base_image`, `build_and_scan`, `iac_scan`).
   * `command_generator.rs`: generates Code Lens entries and associated commands.
   * `supported_commands.rs`: registry of available commands exposed to the client.
 * **`LspInteractor`** – manages communication with the LSP client and document state.
 * **`ImageScanner`** – trait for scanning container images (implemented by infrastructure components).
 * **`ImageBuilder`** – trait for building Docker images.
+* **`IacScanner`** – trait for scanning IaC files/directories for misconfigurations.
 * **`DocumentDatabase` (`document_database.rs`)** – in-memory store for:
   * Document text
   * Diagnostics (LSP warnings/errors for vulnerabilities)
@@ -85,6 +92,11 @@ Key components:
   * Integrates with the Sysdig CLI scanner binary and Sysdig Secure backend.
   * Downloads and manages scanner binary versions.
   * Parses JSON scan results (e.g. via `sysdig_image_scanner_json_scan_result_v1.rs`).
+
+* **`SysdigIacScanner`**
+  * Runs the Sysdig CLI scanner in `--iac` mode over a file or directory (recursive).
+  * Shares the `ScannerBinaryManager` with `SysdigImageScanner` (single shared `Arc<Mutex<...>>` created in `ConcreteComponentFactory`), so the CLI binary is installed only once.
+  * Reads the report from a temp `--output-json` file and parses it via `sysdig_iac_scanner_json_result_v1.rs`.
 
 * **`DockerImageBuilder`**
   * Builds container images using Bollard (Docker API client).
@@ -121,7 +133,7 @@ The high-level LSP flow is:
 1. **Initialize** – Client sends configuration (e.g. `api_url`, `api_token`) via `initializationOptions`.
 2. **`didOpen` / `didChange`** – Document updates trigger parsing and analysis.
 3. **`codeLens`** – The server generates “Scan base image” code lenses on relevant lines (e.g. Dockerfile `FROM` instructions).
-4. **`executeCommand`** – Clicking a lens triggers commands like `scan_base_image` or `build_and_scan`.
+4. **`executeCommand`** – Clicking a lens triggers commands like `scan_base_image`, `build_and_scan` or `iac_scan` (`sysdig-lsp.execute-iac-scan`, which also runs workspace-wide when invoked without arguments).
 5. **`publishDiagnostics`** – Vulnerability findings are sent as diagnostics to the editor.
 6. **`hover`** – Hovering on diagnostics or vulnerable elements shows detailed vulnerability information.
 
