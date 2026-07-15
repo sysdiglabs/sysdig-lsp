@@ -62,9 +62,6 @@ jobs:
           - runner: macos-latest
             os: darwin
             arch: arm64
-          - runner: macos-latest
-            os: darwin
-            arch: amd64
           # - runner: ubuntu-latest # Not supported by the CLI Scanner yet
           #   os: windows
           #   arch: amd64
