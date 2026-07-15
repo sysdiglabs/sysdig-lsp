@@ -4,18 +4,21 @@ use tokio::sync::Mutex;
 use mockall::mock;
 use sysdig_lsp::{
     app::{
-        ImageBuildError, ImageBuildResult, ImageBuilder, ImageScanError, ImageScanner, LSPServer,
+        IacScanError, IacScanScope, IacScanner, ImageBuildError, ImageBuildResult, ImageBuilder,
+        ImageScanError, ImageScanner, LSPServer,
         component_factory::{ComponentFactory, ComponentFactoryError, Components, Config},
     },
-    domain::scanresult::scan_result::ScanResult,
+    domain::{iacscanresult::iac_scan_result::IacScanResult, scanresult::scan_result::ScanResult},
 };
 use tower_lsp::lsp_types::{Diagnostic, MessageType};
 
 // --- Contenido de recorder.rs ---
+pub type PublishedDiagnostics = Vec<(String, Vec<Diagnostic>)>;
+
 #[derive(Clone)]
 pub struct TestClientRecorder {
     pub messages: Arc<Mutex<Vec<(MessageType, String)>>>,
-    pub diagnostics: Arc<Mutex<Vec<Vec<Diagnostic>>>>,
+    pub diagnostics: Arc<Mutex<PublishedDiagnostics>>,
 }
 
 impl TestClientRecorder {
@@ -48,11 +51,14 @@ impl sysdig_lsp::app::LSPClient for TestClientRecorder {
 
     async fn publish_diagnostics(
         &self,
-        _url: &str,
+        url: &str,
         diagnostics: Vec<Diagnostic>,
         _version: Option<i32>,
     ) {
-        self.diagnostics.lock().await.push(diagnostics);
+        self.diagnostics
+            .lock()
+            .await
+            .push((url.to_string(), diagnostics));
     }
 }
 
@@ -73,11 +79,21 @@ mock! {
     }
 }
 
+mock! {
+    pub IacScanner {}
+    #[async_trait::async_trait]
+    impl IacScanner for IacScanner {
+        async fn scan_iac(&self, scope: &IacScanScope) -> Result<IacScanResult, IacScanError>;
+    }
+}
+
 // --- Implementaciones de traits para Arc<Mutex<Mock>> ---
 #[derive(Clone)]
 pub struct MockImageBuilderWrapper(pub Arc<Mutex<MockImageBuilder>>);
 #[derive(Clone)]
 pub struct MockImageScannerWrapper(pub Arc<Mutex<MockImageScanner>>);
+#[derive(Clone)]
+pub struct MockIacScannerWrapper(pub Arc<Mutex<MockIacScanner>>);
 
 #[async_trait::async_trait]
 impl ImageBuilder for MockImageBuilderWrapper {
@@ -96,11 +112,19 @@ impl ImageScanner for MockImageScannerWrapper {
     }
 }
 
+#[async_trait::async_trait]
+impl IacScanner for MockIacScannerWrapper {
+    async fn scan_iac(&self, scope: &IacScanScope) -> Result<IacScanResult, IacScanError> {
+        self.0.lock().await.scan_iac(scope).await
+    }
+}
+
 // --- Estructuras de Setup ---
 #[derive(Clone)]
 pub struct MockComponentFactory {
     pub image_builder: Arc<Mutex<MockImageBuilder>>,
     pub image_scanner: Arc<Mutex<MockImageScanner>>,
+    pub iac_scanner: Arc<Mutex<MockIacScanner>>,
 }
 
 impl ComponentFactory for MockComponentFactory {
@@ -108,6 +132,7 @@ impl ComponentFactory for MockComponentFactory {
         Ok(Components {
             builder: Box::new(MockImageBuilderWrapper(self.image_builder.clone())),
             scanner: Box::new(MockImageScannerWrapper(self.image_scanner.clone())),
+            iac_scanner: Box::new(MockIacScannerWrapper(self.iac_scanner.clone())),
         })
     }
 }
@@ -124,6 +149,7 @@ impl TestSetup {
         let component_factory = MockComponentFactory {
             image_builder: Arc::new(Mutex::new(MockImageBuilder::new())),
             image_scanner: Arc::new(Mutex::new(MockImageScanner::new())),
+            iac_scanner: Arc::new(Mutex::new(MockIacScanner::new())),
         };
         let server = LSPServer::new(client_recorder.clone(), component_factory.clone());
         Self {

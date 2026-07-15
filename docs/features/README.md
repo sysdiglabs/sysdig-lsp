@@ -29,4 +29,10 @@ Sysdig LSP provides tools to integrate container security checks into your devel
 - Displays a detailed summary of scan results when hovering over a scanned image name.
 - Provides immediate feedback on vulnerabilities, severities, and available fixes.
 
+## [Infrastructure-as-Code Analysis](./iac_scan.md)
+- Scans IaC files (Kubernetes manifests, Terraform, etc.) for misconfigurations.
+- Scans the whole workspace recursively or a single file via code lens.
+
 See the linked documents for more details.
+
+For planned features, see the [roadmap](../roadmap.md).

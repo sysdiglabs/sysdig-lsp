@@ -5,6 +5,8 @@ mod docker_socket_discovery;
 mod dockerfile_ast_parser;
 mod k8s_manifest_ast_parser;
 mod scanner_binary_manager;
+mod sysdig_iac_scanner;
+mod sysdig_iac_scanner_json_result_v1;
 mod sysdig_image_scanner;
 mod sysdig_image_scanner_json_scan_result_v1;
 

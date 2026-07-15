@@ -44,7 +44,7 @@ impl<C, F: ComponentFactory> LSPServer<C, F> {
 #[async_trait::async_trait]
 impl<C, F> LanguageServer for LSPServer<C, F>
 where
-    C: LSPClient + Send + Sync + 'static,
+    C: LSPClient + Clone + Send + Sync + 'static,
     F: ComponentFactory + Send + Sync + 'static,
 {
     async fn initialize(&self, params: InitializeParams) -> Result<InitializeResult> {
@@ -80,7 +80,12 @@ where
     }
 
     async fn execute_command(&self, params: ExecuteCommandParams) -> Result<Option<Value>> {
-        self.inner.read().await.execute_command(params).await
+        // Clone the command dependencies under a short-lived guard and run the
+        // command without holding the server lock: scans can take minutes, and
+        // holding the (FIFO-fair) read guard would stall every other request as
+        // soon as a write (did_change_configuration) queues behind it.
+        let executor = self.inner.read().await.command_executor();
+        executor.execute_command(params).await
     }
 
     async fn hover(&self, params: HoverParams) -> Result<Option<Hover>> {
