@@ -35,8 +35,9 @@ The easiest way to install Sysdig LSP is to download a pre-built binary from the
 1. **Download the binary for your platform:**
    - Linux x86_64: `sysdig-lsp-linux-amd64`
    - Linux ARM64: `sysdig-lsp-linux-arm64`
-   - macOS x86_64 (Intel): `sysdig-lsp-darwin-amd64`
    - macOS ARM64 (Apple Silicon): `sysdig-lsp-darwin-arm64`
+
+   > **Note:** macOS x86_64 (Intel) is no longer supported since Nixpkgs dropped the `x86_64-darwin` cross-compilation target. The last release with a `sysdig-lsp-darwin-amd64` binary is [0.8.5](https://github.com/sysdiglabs/sysdig-lsp/releases/tag/0.8.5).
 
 2. **Make it executable and move to your PATH:**
    ```bash
@@ -105,7 +106,6 @@ The following binaries are built:
 
 - Linux x86_64: `nix build .#sysdig-lsp-linux-amd64`
 - Linux aarch64: `nix build .#sysdig-lsp-linux-arm64`
-- Darwin x86_64: `nix build .#sysdig-lsp-darwin-amd64`
 - Darwin aarch64: `nix build .#sysdig-lsp-darwin-arm64`
 
 Windows is not yet supported because the Sysdig CLI Scanner is not releasing a .exe for now, but you can still build it with `nix build .#sysdig-lsp-windows-amd64`
