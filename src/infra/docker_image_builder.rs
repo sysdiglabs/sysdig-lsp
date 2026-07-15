@@ -121,7 +121,7 @@ impl ImageBuilder for DockerImageBuilder {
 
 #[cfg(test)]
 mod tests {
-    use std::{path::PathBuf, str::FromStr};
+    use std::{assert_matches, path::PathBuf, str::FromStr};
 
     use crate::{
         app::{ImageBuildError, ImageBuilder},
@@ -189,11 +189,7 @@ mod tests {
             .build_image(&PathBuf::from_str("tests/fixtures/Invalid.dockerfile").unwrap())
             .await;
 
-        assert!(image_built.is_err());
-        assert!(matches!(
-            image_built,
-            Err(ImageBuildError::ImageBuilderError(_))
-        ));
+        assert_matches!(image_built, Err(ImageBuildError::ImageBuilderError(_)));
         assert_eq!(
             image_built.err().unwrap().to_string(),
             "image builder error: internal docker client error: DockerStreamError { error: \"The command '/bin/sh -c apt update # should fail, apt is not present in alpine' returned a non-zero code: 127\" }"

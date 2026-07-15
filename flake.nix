@@ -45,7 +45,6 @@
                 cargo-machete
                 cargo-nextest
                 cargo-tarpaulin
-                cargo-watch
                 clippy
                 just
                 lldb
