@@ -12,6 +12,7 @@ pub enum PackageType {
     Ruby,
     Php,
     CSharp,
+    Oci,
 }
 
 impl Display for PackageType {
@@ -30,6 +31,7 @@ impl Display for PackageType {
                 PackageType::Ruby => "ruby",
                 PackageType::Php => "php",
                 PackageType::CSharp => "csharp",
+                PackageType::Oci => "oci",
             }
         )
     }

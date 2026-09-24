@@ -372,9 +372,9 @@ pub(super) enum JsonPackageType {
     Ruby,
     #[serde(rename = "rust")]
     Rust,
-    // Newer scanners add package types (e.g. `oci`); don't fail the whole report on them.
+    #[serde(rename = "oci")]
+    Oci,
     #[default]
-    #[serde(other)]
     Unknown,
 }
 
@@ -390,6 +390,7 @@ impl From<JsonPackageType> for PackageType {
             JsonPackageType::Python => Self::Python,
             JsonPackageType::Ruby => Self::Ruby,
             JsonPackageType::Rust => Self::Rust,
+            JsonPackageType::Oci => Self::Oci,
             JsonPackageType::Unknown => Self::Unknown,
         }
     }
@@ -458,7 +459,6 @@ pub(super) enum JsonRiskAcceptReason {
     RiskNotRelevant,
     Custom,
     #[default]
-    #[serde(other)]
     Unknown,
 }
 
@@ -574,10 +574,10 @@ pub(super) struct JsonVulnerability {
 #[cfg(test)]
 mod tests {
     use crate::{
-        domain::scanresult::{scan_result::ScanResult, severity::Severity},
-        infra::sysdig_image_scanner_json_scan_result_v1::{
-            JsonPackageType, JsonRiskAcceptReason, JsonScanResultV1,
+        domain::scanresult::{
+            package_type::PackageType, scan_result::ScanResult, severity::Severity,
         },
+        infra::sysdig_image_scanner_json_scan_result_v1::{JsonPackageType, JsonScanResultV1},
     };
 
     #[test]
@@ -679,11 +679,8 @@ mod tests {
     }
 
     #[test]
-    fn it_maps_unknown_enum_values_to_unknown() {
+    fn it_deserializes_the_oci_package_type() {
         let package_type: JsonPackageType = serde_json::from_str(r#""oci""#).unwrap();
-        assert!(matches!(package_type, JsonPackageType::Unknown));
-
-        let reason: JsonRiskAcceptReason = serde_json::from_str(r#""SomethingNew""#).unwrap();
-        assert!(matches!(reason, JsonRiskAcceptReason::Unknown));
+        assert_eq!(PackageType::from(package_type), PackageType::Oci);
     }
 }
