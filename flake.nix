@@ -45,12 +45,14 @@
                 cargo-nextest
                 cargo-tarpaulin
                 clippy
+                curl
                 just
                 lldb
                 pre-commit
                 rust-analyzer
                 rustc
                 rustfmt
+                sd
               ];
 
               inputsFrom = [ sysdig-lsp ];

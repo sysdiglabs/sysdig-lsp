@@ -44,7 +44,7 @@ pub(super) struct ScannerBinaryManager {}
 
 impl ScannerBinaryManager {
     const fn version(&self) -> Version {
-        Version::new(1, 23, 0)
+        Version::new(1, 30, 1) // newest-version-marker — DO NOT REMOVE; auto-updated by `just update-cli-scanner`
     }
 
     pub async fn install_expected_version_if_not_present(
@@ -197,7 +197,7 @@ mod tests {
     async fn it_gets_the_wanted_version() {
         let mgr = ScannerBinaryManager::default();
 
-        assert_eq!(mgr.version().to_string(), "1.23.0");
+        assert_eq!(mgr.version().to_string(), "1.30.1"); // newest-version-marker — DO NOT REMOVE; auto-updated by `just update-cli-scanner`
     }
 
     #[tokio::test]
