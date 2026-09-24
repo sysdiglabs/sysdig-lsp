@@ -13,6 +13,7 @@ pub enum PackageType {
     Php,
     CSharp,
     Oci,
+    SoftwareRuntime,
 }
 
 impl Display for PackageType {
@@ -32,6 +33,7 @@ impl Display for PackageType {
                 PackageType::Php => "php",
                 PackageType::CSharp => "csharp",
                 PackageType::Oci => "oci",
+                PackageType::SoftwareRuntime => "software runtime",
             }
         )
     }

@@ -374,6 +374,8 @@ pub(super) enum JsonPackageType {
     Rust,
     #[serde(rename = "oci")]
     Oci,
+    #[serde(rename = "Software Runtime")]
+    SoftwareRuntime,
     #[default]
     Unknown,
 }
@@ -391,6 +393,7 @@ impl From<JsonPackageType> for PackageType {
             JsonPackageType::Ruby => Self::Ruby,
             JsonPackageType::Rust => Self::Rust,
             JsonPackageType::Oci => Self::Oci,
+            JsonPackageType::SoftwareRuntime => Self::SoftwareRuntime,
             JsonPackageType::Unknown => Self::Unknown,
         }
     }
@@ -678,9 +681,14 @@ mod tests {
         assert_eq!(found_layer.unwrap().digest(), Some(digest));
     }
 
-    #[test]
-    fn it_deserializes_the_oci_package_type() {
-        let package_type: JsonPackageType = serde_json::from_str(r#""oci""#).unwrap();
-        assert_eq!(PackageType::from(package_type), PackageType::Oci);
+    #[rstest::rstest]
+    #[case(r#""oci""#, PackageType::Oci)]
+    #[case(r#""Software Runtime""#, PackageType::SoftwareRuntime)]
+    fn it_deserializes_package_types_added_in_newer_scanners(
+        #[case] json: &str,
+        #[case] expected: PackageType,
+    ) {
+        let package_type: JsonPackageType = serde_json::from_str(json).unwrap();
+        assert_eq!(PackageType::from(package_type), expected);
     }
 }
