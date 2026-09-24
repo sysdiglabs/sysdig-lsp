@@ -237,7 +237,7 @@ mod tests {
                 .await
                 .unwrap()
                 .to_string(),
-            "1.23.0"
+            mgr.version().to_string()
         );
     }
 
@@ -260,7 +260,7 @@ mod tests {
                 .await
                 .unwrap()
                 .to_string(),
-            "1.23.0"
+            mgr.version().to_string()
         );
     }
 }
