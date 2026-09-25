@@ -180,6 +180,12 @@ The project uses `just` as a command runner to encapsulate common workflows.
 * `just fix`
   * Runs `cargo fix` and `cargo machete` / `cargo machete --fix` to clean up unused dependencies and minor issues.
 
+* `just update`
+  * Updates flake inputs, Cargo deps and pre-commit hooks, and runs `just update-cli-scanner`.
+
+* `just update-cli-scanner`
+  * Bumps the pinned Sysdig CLI scanner version in `src/infra/scanner_binary_manager.rs` to the latest release. It rewrites the lines tagged with `newest-version-marker`; do not remove those markers.
+
 Additional helpful commands:
 
 * `cargo test -- --nocapture` – run tests with full output when debugging.

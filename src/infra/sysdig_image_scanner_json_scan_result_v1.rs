@@ -372,6 +372,10 @@ pub(super) enum JsonPackageType {
     Ruby,
     #[serde(rename = "rust")]
     Rust,
+    #[serde(rename = "oci")]
+    Oci,
+    #[serde(rename = "Software Runtime")]
+    SoftwareRuntime,
     #[default]
     Unknown,
 }
@@ -388,6 +392,8 @@ impl From<JsonPackageType> for PackageType {
             JsonPackageType::Python => Self::Python,
             JsonPackageType::Ruby => Self::Ruby,
             JsonPackageType::Rust => Self::Rust,
+            JsonPackageType::Oci => Self::Oci,
+            JsonPackageType::SoftwareRuntime => Self::SoftwareRuntime,
             JsonPackageType::Unknown => Self::Unknown,
         }
     }
@@ -571,8 +577,10 @@ pub(super) struct JsonVulnerability {
 #[cfg(test)]
 mod tests {
     use crate::{
-        domain::scanresult::{scan_result::ScanResult, severity::Severity},
-        infra::sysdig_image_scanner_json_scan_result_v1::JsonScanResultV1,
+        domain::scanresult::{
+            package_type::PackageType, scan_result::ScanResult, severity::Severity,
+        },
+        infra::sysdig_image_scanner_json_scan_result_v1::{JsonPackageType, JsonScanResultV1},
     };
 
     #[test]
@@ -671,5 +679,16 @@ mod tests {
         let found_layer = scan_result.find_layer_by_digest(digest);
         assert!(found_layer.is_some(), "Should find layer by valid digest");
         assert_eq!(found_layer.unwrap().digest(), Some(digest));
+    }
+
+    #[rstest::rstest]
+    #[case(r#""oci""#, PackageType::Oci)]
+    #[case(r#""Software Runtime""#, PackageType::SoftwareRuntime)]
+    fn it_deserializes_package_types_added_in_newer_scanners(
+        #[case] json: &str,
+        #[case] expected: PackageType,
+    ) {
+        let package_type: JsonPackageType = serde_json::from_str(json).unwrap();
+        assert_eq!(PackageType::from(package_type), expected);
     }
 }
